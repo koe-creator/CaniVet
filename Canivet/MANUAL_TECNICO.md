@@ -1,251 +1,363 @@
 # MANUAL TECNICO CaniVet
 
-## 1. Arquitectura del sistema
-CaniVet sigue una arquitectura cliente-servidor compuesta por tres partes:
+## 1. Introduccion tecnica
 
-### Frontend
-- Aplicacion SPA desarrollada en React con Vite.
-- Responsable de la interfaz, validaciones de formulario, panel administrativo y reportes.
+Este manual describe la estructura tecnica real del sistema CaniVet a partir de los modulos, rutas, componentes y tablas identificadas en el repositorio. Su proposito es servir como referencia para desarrollo, mantenimiento, despliegue, soporte y evolucion del proyecto.
 
-### Backend
-- API REST desarrollada en Flask.
-- Responsable de autenticacion, validacion de tokens, rutas protegidas, servicios auxiliares y envio de correos.
+## 2. Vision general de la arquitectura
 
-### Capa de datos
-- Supabase se utiliza para autenticacion y almacenamiento de datos.
-- Algunas configuraciones complementarias se guardan en `localStorage` desde el frontend.
+CaniVet implementa una arquitectura cliente servidor apoyada en servicios externos:
 
-## 2. Stack tecnologico
-- React 19
-- Vite 8
-- JavaScript ES Modules
-- Flask 3
-- Python 3.10+
-- Supabase JS
-- Supabase Python client
-- Chart.js
-- CSS
+- Frontend SPA desarrollado con React y Vite.
+- Backend API desarrollado con Flask.
+- Base de datos y autenticacion gestionadas principalmente por Supabase.
+- Integraciones externas para correo SMTP y Stripe Checkout.
 
-## 3. Estructura de carpetas
+### 2.1 Distribucion por capas
+
+| Capa | Tecnologia | Responsabilidad |
+|---|---|---|
+| Presentacion | React 19 + Vite | UI publica y panel administrativo |
+| Logica cliente | Hooks, contextos, servicios JS | Estado, reglas de UI, consumo de APIs y Supabase |
+| API de soporte | Flask 3 | Auth complementaria, validaciones, correo, Stripe y CRUD backend |
+| Persistencia | Supabase PostgreSQL | Almacenamiento de entidades principales y extendidas |
+| Integraciones | SMTP, Stripe | Comunicacion y pagos online |
+
+## 3. Estructura del repositorio
+
 ```text
 canivet/
-├── backend/
-│   ├── core/
-│   │   ├── auth.py
-│   │   ├── email_service.py
-│   │   ├── services.py
-│   │   └── validators.py
-│   ├── routes/
-│   │   ├── citas.py
-│   │   ├── clientes.py
-│   │   ├── contact.py
-│   │   ├── inventario.py
-│   │   ├── mascotas.py
-│   │   ├── pagos.py
-│   │   └── servicios.py
-│   ├── tests/
-│   ├── .env
-│   ├── app.py
-│   └── requirements.txt
-└── Canivet/
-    ├── public/
-    ├── src/
-    │   ├── components/
-    │   ├── context/
-    │   ├── hooks/
-    │   ├── pages/
-    │   ├── router/
-    │   ├── services/
-    │   ├── styles/
-    │   └── utils/
-    ├── .env
-    ├── package.json
-    └── vite.config.js
+|-- Canivet/                  # Frontend principal React
+|   |-- src/
+|   |   |-- components/
+|   |   |-- context/
+|   |   |-- hooks/
+|   |   |-- pages/
+|   |   |-- router/
+|   |   |-- services/
+|   |   |-- styles/
+|   |   `-- utils/
+|   |-- public/
+|   |-- ACTA_PROYECTO.md
+|   |-- MANUAL_TECNICO.md
+|   |-- MANUAL_USUARIO.md
+|   `-- CRONOGRAMA.md
+|-- backend/
+|   |-- core/
+|   |-- routes/
+|   |-- tests/
+|   |-- app.py
+|   `-- requirements.txt
+|-- docs/                     # Entregables adicionales y scripts documentales
+|-- migration.sql
+|-- migration_v2.sql
+|-- migration_v3.sql
+`-- migration_v4.sql
 ```
 
-## 4. Descripcion de cada endpoint de la API
+## 4. Frontend
 
-### Salud del sistema
-#### `GET /health`
-- Verifica que el backend este activo.
-- Respuesta esperada:
-  - `ok: true`
-  - `time: fecha y hora UTC`
+### 4.1 Stack principal
 
-### Autenticacion
-#### `POST /auth/login`
-- Permite iniciar sesion.
-- Body:
-```json
-{
-  "email": "usuario@correo.com",
-  "password": "123456"
-}
-```
+- React
+- React Router
+- Vite
+- CSS modular por archivo
+- Chart.js para visualizaciones
+- Supabase JS client
 
-#### `POST /auth/register`
-- Registra un nuevo usuario.
-- Body:
-```json
-{
-  "email": "usuario@correo.com",
-  "password": "123456"
-}
-```
+### 4.2 Enrutamiento
 
-#### `POST /auth/me`
-- Valida el token y devuelve datos del usuario.
-- Requiere header:
-```text
-Authorization: Bearer <token>
-```
+Las rutas principales definidas en `src/router/AppRouter.jsx` son:
 
-#### `POST /auth/redirect`
-- Devuelve ruta sugerida segun rol.
-- Requiere token.
+- `/` -> `HomePage`
+- `/login` -> `LoginPage`
+- `/registro` -> `RegisterPage`
+- `/admin/*` -> `AdminLayout` protegido por `ProtectedRoute`
 
-### Clientes
-#### `GET /api/clientes/`
-- Lista clientes
+### 4.3 Distribucion funcional del frontend
 
-#### `GET /api/clientes/<id>`
-- Obtiene un cliente
+#### Paginas publicas
 
-#### `POST /api/clientes/`
-- Crea cliente
+- `HomePage`
+- `LoginPage`
+- `RegistrerPage`
+- `Services`
+- `Contact`
 
-#### `PUT /api/clientes/<id>`
-- Actualiza cliente
+#### Paginas administrativas
 
-#### `DELETE /api/clientes/<id>`
-- Elimina cliente
+- `Dashboard`
+- `Clients`
+- `Pets`
+- `Appointments`
+- `Services`
+- `Payments`
+- `Inventory`
+- `Reports`
+- `Settings`
+- `Subscriptions`
+- `Daycare`
+- `Walks`
+- `Audit`
 
-### Mascotas
-#### `GET /api/mascotas/`
-- Lista mascotas
+#### Componentes estructurales
 
-#### `GET /api/mascotas/cliente/<cliente_id>`
-- Lista mascotas por cliente
+- `AdminLayout`
+- `PublicLayout`
+- `Sidebar`
+- `Topbar`
+- `Navbar`
 
-#### `POST /api/mascotas/`
-- Crea mascota
+#### Componentes UI reutilizables
 
-#### `PUT /api/mascotas/<id>`
-- Actualiza mascota
+- `Button`
+- `Card`
+- `Input`
+- `Modal`
+- `Pagination`
+- `Table`
+- `Toast`
+- `Badge`
+- `ErrorBanner`
 
-#### `DELETE /api/mascotas/<id>`
-- Elimina mascota
+### 4.4 Gestion de estado en frontend
 
-### Citas
-#### `GET /api/citas/`
-- Lista citas
+El proyecto combina varias estrategias:
 
-#### `GET /api/citas/hoy`
-- Lista las citas del dia actual
+- `AuthContext` para sesion y usuario.
+- `AppConfigContext` para configuracion global, sucursales, permisos, notificaciones y entidades extendidas.
+- Hooks por dominio como `useAppointments`, `useClients`, `usePets`, `useInventory`, `useAuth` y `useSupabaseCRUD`.
 
-#### `POST /api/citas/`
-- Crea cita
+### 4.5 Modulos funcionales del frontend
 
-#### `PUT /api/citas/<id>`
-- Actualiza cita
+#### Dashboard
 
-#### `DELETE /api/citas/<id>`
-- Elimina cita
+- Carga clientes, mascotas, citas, pagos, servicios e inventario.
+- Muestra KPIs, alertas de vacunas, stock critico, suscripciones proximas y actividad reciente.
+- Implementa auto refresh periodico.
 
-### Servicios
-#### `GET /api/servicios/`
-- Lista servicios
+#### Clientes
 
-#### `POST /api/servicios/`
-- Crea servicio
+- CRUD de propietarios.
+- Soporte de filtrado y asignacion de sucursal.
 
-#### `PUT /api/servicios/<id>`
-- Actualiza servicio
+#### Mascotas
 
-#### `DELETE /api/servicios/<id>`
-- Elimina servicio
+- CRUD principal de mascotas.
+- Gestion de vacunas.
+- Gestion de historial clinico.
+- Perfil ampliado con resumen de salud.
+- Consulta de paseos, guarderia y fotos de servicio.
 
-### Pagos
-#### `GET /api/pagos/`
-- Lista pagos
+#### Citas
 
-#### `POST /api/pagos/`
-- Crea pago
+- CRUD de citas.
+- Bandeja de reservas online.
+- Confirmacion o rechazo de reservas.
+- Envio de correos de confirmacion.
+- Generacion de enlace Stripe para pagos online.
 
-#### `PUT /api/pagos/<id>`
-- Actualiza pago
+#### Servicios
 
-#### `DELETE /api/pagos/<id>`
-- Elimina pago
+- Catalogo interno y publico de servicios.
+- Relacion con reservas y citas.
 
-### Inventario
-#### `GET /api/inventario/`
-- Lista productos
+#### Pagos
 
-#### `GET /api/inventario/bajo-stock`
-- Lista productos con bajo stock
+- Registro de cobros.
+- Asociacion con cliente.
+- Soporte de metodos y estados.
+- Integracion con facturas y pagos online por contexto.
 
-#### `POST /api/inventario/`
-- Crea producto
+#### Inventario
 
-#### `PUT /api/inventario/<id>`
-- Actualiza producto
+- CRUD de productos.
+- Identificacion de bajo stock.
 
-#### `DELETE /api/inventario/<id>`
-- Elimina producto
+#### Reportes
 
-### Contacto
-#### `POST /api/contacto/`
-- Recibe mensajes del formulario de contacto y los envia por correo si SMTP esta configurado.
+- Reportes financieros.
+- Distribucion por metodos de pago.
+- Rentabilidad por servicio.
+- Top clientes.
+- Analisis por mascota.
+- Resumen por sucursal.
+- Valoracion del inventario.
+- Exportacion a CSV, JSON y formato imprimible.
 
-## 5. Estructura de la base de datos
+#### Configuracion
 
-## Tablas operativas usadas por el frontend
+- Datos de clinica.
+- Sucursales.
+- Usuarios y roles.
+- Notificaciones manuales.
+- Parametros operativos.
 
-### `clients`
-- `id`
-- `nombre`
-- `telefono`
-- `email`
+#### Suscripciones
 
-### `pets`
-- `id`
-- `nombre`
-- `tipo`
-- `raza`
-- `edad`
-- `cliente_id`
+- Registro de planes recurrentes por cliente o mascota.
+- Seguimiento de monto, proximo cobro y estado.
 
-### `appointments`
-- `id`
-- `fecha`
-- `hora`
-- `cliente_id`
-- `mascota_id`
-- `servicio_id`
-- `notas`
+#### Guarderia
 
-### `services`
-- `id`
-- `nombre`
-- `descripcion`
-- `precio`
+- Registro de asistencia, check in y check out.
 
-### `payments`
-- `id`
-- `cliente_id`
-- `monto`
-- `fecha`
-- `metodo`
+#### Paseos
 
-### `inventory`
-- `id`
-- `nombre`
-- `cantidad`
-- `precio`
+- Programacion y seguimiento de paseos.
+- Control de estado y auditoria asociada.
 
-## Tablas esperadas por el backend API
-El backend CRUD actual referencia estas tablas en Supabase:
+#### Auditoria
+
+- Consulta de acciones registradas.
+- Exportacion de trazabilidad.
+
+## 5. Backend Flask
+
+### 5.1 Archivo de entrada
+
+El backend se inicializa en `backend/app.py`. Este archivo:
+
+- Carga variables de entorno con `load_dotenv`.
+- Configura CORS.
+- Define handlers globales de error.
+- Expone endpoints de autenticacion.
+- Registra blueprints funcionales.
+
+### 5.2 Blueprints registrados
+
+| Prefix | Archivo | Funcion |
+|---|---|---|
+| `/api/clientes` | `routes/clientes.py` | CRUD de clientes |
+| `/api/mascotas` | `routes/mascotas.py` | CRUD de mascotas |
+| `/api/citas` | `routes/citas.py` | CRUD de citas y confirmacion por correo |
+| `/api/servicios` | `routes/servicios.py` | CRUD de servicios |
+| `/api/pagos` | `routes/pagos.py` | CRUD de pagos |
+| `/api/inventario` | `routes/inventario.py` | CRUD de inventario |
+| `/api/contacto` | `routes/contact.py` | Contacto publico y correo |
+| `/api/reservas` | `routes/reservas.py` | Reservas online publicas y gestion interna |
+| `/api/stripe` | `routes/stripe_payments.py` | Checkout y webhook Stripe |
+| `/api/email` | `routes/email_bp.py` | Notificaciones SMTP |
+
+### 5.3 Endpoints base del backend
+
+#### Salud
+
+- `GET /health`
+
+#### Autenticacion
+
+- `POST /auth/login`
+- `POST /auth/register`
+- `POST /auth/me`
+- `POST /auth/redirect`
+
+#### Citas
+
+- `GET /api/citas/`
+- `GET /api/citas/hoy`
+- `POST /api/citas/`
+- `PUT /api/citas/<id>`
+- `DELETE /api/citas/<id>`
+- `POST /api/citas/notify-confirmation`
+
+#### Reservas online
+
+- `POST /api/reservas/`
+- `GET /api/reservas/`
+- `PUT /api/reservas/<id>`
+
+#### Stripe
+
+- `POST /api/stripe/checkout`
+- `POST /api/stripe/webhook`
+
+#### Email
+
+- `POST /api/email/test`
+- `POST /api/email/reserva`
+- `POST /api/email/cita-confirmada`
+- `POST /api/email/reserva-rechazada`
+- `POST /api/email/recibo-pago`
+- `POST /api/email/alerta-vacuna`
+- `POST /api/email/recordatorio-cita`
+- `POST /api/email/link-pago`
+- `POST /api/email/manual-notification`
+- `POST /api/email/client-welcome`
+
+## 6. Capa de autenticacion y seguridad
+
+### 6.1 Autenticacion
+
+La autenticacion principal se apoya en Supabase Auth. El backend complementa este flujo con:
+
+- Extraccion de bearer token.
+- Decodificacion y verificacion JWT.
+- Resolucion de rol.
+- Rutas protegidas mediante decoradores.
+
+### 6.2 Control de acceso
+
+En frontend, `AppConfigContext` define paginas accesibles por rol:
+
+- `admin`: acceso total al panel.
+- `user`: acceso operativo sin reportes, auditoria ni configuracion avanzada.
+
+### 6.3 CORS
+
+`backend/app.py` toma `CORS_ORIGINS` y habilita los origenes configurados.
+
+### 6.4 Recomendaciones de seguridad
+
+- Nunca exponer `SUPABASE_SERVICE_ROLE_KEY` en frontend.
+- Mantener separados los `.env` de frontend y backend.
+- Validar que Stripe y SMTP no usen credenciales placeholder.
+- Aplicar revisiones periodicas a roles, usuarios y sucursales.
+
+## 7. Validaciones de datos
+
+El backend utiliza `core/validators.py` para validar payloads:
+
+- `CLIENT_VALIDATOR`
+- `PET_VALIDATOR`
+- `APPOINTMENT_VALIDATOR`
+- `SERVICE_VALIDATOR`
+- `PAYMENT_VALIDATOR`
+- `INVENTORY_VALIDATOR`
+- `CONTACT_VALIDATOR`
+
+Estas validaciones cubren campos obligatorios, formato de correo, numericos, limites y carga parcial para updates.
+
+## 8. Servicios de acceso a datos
+
+### 8.1 Servicio generico
+
+`core/services.py` define `SupabaseEntityService`, una capa CRUD reutilizable para:
+
+- listar
+- consultar por id
+- crear
+- actualizar
+- eliminar
+
+La clase trabaja por tabla y campo de orden, y soporta filtros y busqueda ligera.
+
+### 8.2 Patron dominante
+
+El proyecto usa dos caminos de acceso a datos:
+
+- Desde frontend con `supabase.from(...)`
+- Desde backend con `SupabaseEntityService` y `table(...)`
+
+Esto significa que parte importante de la operacion se resuelve directamente desde la UI y otra parte pasa por API Flask cuando requiere validacion adicional o integracion externa.
+
+## 9. Modelo de datos
+
+### 9.1 Tablas operativas principales
+
+Usadas por CRUD y dashboard:
+
 - `clientes`
 - `mascotas`
 - `citas`
@@ -253,93 +365,196 @@ El backend CRUD actual referencia estas tablas en Supabase:
 - `pagos`
 - `inventario`
 
-Nota tecnica:
-- El frontend administrativo consume directamente tablas en ingles.
-- El backend CRUD actual fue preparado con tablas en español.
-- En un despliegue final conviene homologar ambos nombres para evitar duplicidad.
+### 9.2 Tablas extendidas y de soporte
 
-## Estructuras complementarias guardadas en LocalStorage
-El contexto `AppConfigContext` guarda datos de apoyo como:
-- sucursales
-- directorio de usuarios
-- asignacion de registros por sucursal
-- estados de citas
-- facturas
-- vacunas
-- historial clinico
-- notificaciones
+Identificadas en migraciones y `AppConfigContext`:
 
-## 6. Variables de entorno necesarias
+- `vacunas`
+- `historial_clinico`
+- `suscripciones`
+- `guarderia`
+- `paseos`
+- `facturas`
+- `pagos_online`
+- `notificaciones`
+- `auditoria`
+- `sucursales`
+- `fotos_servicio`
+- `reservas_online`
+- `usuarios_sistema`
 
-### Frontend `Canivet/.env`
-```env
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-VITE_SUPABASE_PUBLISHABLE_KEY=
-VITE_API_URL=http://localhost:5000
-```
+### 9.3 Funciones de cada grupo de tablas
 
-### Backend `backend/.env`
-```env
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-SUPABASE_JWT_SECRET=
-ADMIN_ROLE=admin
-DEFAULT_ROLE=user
-ADMIN_PATH=/admin
-USER_PATH=/
-PORT=5000
-CORS_ORIGINS=http://localhost:5173
-ADMIN_EMAILS=admin@canivet.com
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USERNAME=
-SMTP_PASSWORD=
-SMTP_USE_TLS=true
-MAIL_FROM=
-CONTACT_RECIPIENT=
-```
+| Grupo | Tablas | Uso |
+|---|---|---|
+| Core comercial | `clientes`, `mascotas`, `citas`, `servicios`, `pagos`, `inventario` | Operacion diaria |
+| Salud | `vacunas`, `historial_clinico` | Seguimiento clinico y preventivo |
+| Ingresos extendidos | `facturas`, `pagos_online`, `suscripciones` | Cobro recurrente y digital |
+| Servicios especiales | `guarderia`, `paseos`, `fotos_servicio` | Servicios complementarios |
+| Gobierno | `notificaciones`, `auditoria`, `sucursales`, `usuarios_sistema` | Control operativo y trazabilidad |
+| Captacion | `reservas_online` | Solicitudes publicas desde la web |
 
-## 7. Proceso de instalacion tecnica
+### 9.4 Migraciones identificadas
 
-### Paso 1. Clonar el repositorio
-```bash
-git clone <URL_DEL_REPOSITORIO>
-cd canivet
-```
+- `migration.sql`: crea el bloque grande de tablas extendidas.
+- `migration_v2.sql`: crea `reservas_online`.
+- `migration_v3.sql`: ajusta politicas RLS sobre tablas extendidas.
+- `migration_v4.sql`: crea `usuarios_sistema`.
 
-### Paso 2. Configurar frontend
+## 10. Integraciones
+
+### 10.1 Supabase
+
+Se utiliza para:
+
+- autenticacion
+- persistencia de datos
+- lectura y escritura de la mayoria de entidades
+
+### 10.2 SMTP
+
+`core/email_service.py` y `routes/email_bp.py` soportan:
+
+- email de prueba
+- confirmacion de reserva
+- alerta al administrador
+- confirmacion de cita
+- rechazo de reserva
+- recibo de pago
+- alerta de vacuna
+- recordatorio de cita
+- enlace de pago
+- notificacion manual
+- bienvenida a cliente
+
+### 10.3 Stripe
+
+`routes/stripe_payments.py` implementa:
+
+- creacion de checkout session
+- retorno de URL para pago
+- procesamiento de webhook
+- actualizacion de `pagos_online`
+
+## 11. Variables de entorno relevantes
+
+### 11.1 Frontend
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_API_URL`
+
+### 11.2 Backend
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_JWT_SECRET`
+- `CORS_ORIGINS`
+- `PORT`
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `ADMIN_EMAILS`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `FRONTEND_URL`
+
+## 12. Flujo tecnico de procesos clave
+
+### 12.1 Login
+
+1. Usuario envia credenciales desde frontend.
+2. Backend llama a Supabase Auth.
+3. Se devuelve token.
+4. Frontend valida redireccion segun rol.
+5. `ProtectedRoute` protege el panel.
+
+### 12.2 Reserva online
+
+1. Cliente visita pagina de servicios.
+2. Completa formulario de reserva.
+3. La reserva se guarda en `reservas_online`.
+4. Se envian correos al cliente y al administrador.
+5. Desde admin, la reserva puede rechazarse o confirmarse.
+6. Al confirmarla, se crea una cita formal.
+
+### 12.3 Confirmacion de cita
+
+1. El admin confirma una reserva o crea una cita.
+2. El frontend puede invocar el backend de confirmacion.
+3. El backend valida payload.
+4. Se emite correo de confirmacion si SMTP esta configurado.
+
+### 12.4 Pago online
+
+1. Se genera registro contextual de pago.
+2. El admin solicita checkout de Stripe.
+3. Stripe devuelve session y URL.
+4. El cliente paga.
+5. El webhook actualiza `pagos_online`.
+
+### 12.5 Vacunas e historial clinico
+
+1. En el modulo Mascotas se registran dosis y consultas.
+2. Los datos se guardan en tablas especializadas.
+3. El dashboard y reportes usan esa informacion para alertas y analitica.
+
+## 13. Estrategia de pruebas observada
+
+El repositorio contiene:
+
+- `backend/tests/test_app.py`
+- `Canivet/tests/validators.test.js`
+
+Esto indica al menos cobertura inicial sobre backend y validaciones cliente. Aun asi, por el volumen de modulos, conviene ampliar pruebas sobre:
+
+- reservas online
+- flujos de correo
+- confirmacion de citas
+- pagos online
+- permisos por rol
+- filtros por sucursal
+
+## 14. Despliegue local
+
+### 14.1 Frontend
+
 ```bash
 cd Canivet
 npm install
-```
-
-### Paso 3. Configurar backend
-```powershell
-cd ..\backend
-python -m venv .venv
-.\.venv\Scripts\pip.exe install -r requirements.txt
-```
-
-### Paso 4. Crear archivos `.env`
-- Configurar `Canivet/.env`
-- Configurar `backend/.env`
-
-### Paso 5. Ejecutar backend
-```powershell
-.\.venv\Scripts\python.exe app.py
-```
-
-### Paso 6. Ejecutar frontend
-```powershell
-cd ..\Canivet
 npm run dev
 ```
 
-### Paso 7. Probar el sistema
-- Abrir `http://localhost:5173`
-- Crear cuenta
-- Confirmar correo si Supabase lo requiere
-- Iniciar sesion
-- Revisar acceso al panel `/admin`
+### 14.2 Backend
+
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python app.py
+```
+
+## 15. Mantenimiento recomendado
+
+- Revisar periodicamente variables de entorno.
+- Mantener sincronizadas las migraciones con la realidad del frontend.
+- Documentar cada nueva tabla o endpoint.
+- Registrar cambios funcionales por modulo.
+- Monitorear logs de correo y pagos.
+- Ejecutar pruebas despues de cambios en auth, pagos o reservas.
+
+## 16. Deuda tecnica y oportunidades de mejora
+
+- Unificar mas claramente que operaciones pasan por frontend directo y cuales por backend.
+- Endurecer reglas de seguridad y RLS segun ambiente final.
+- Expandir pruebas automatizadas por dominio.
+- Formalizar manejo de errores y trazas en produccion.
+- Consolidar documentacion viva de base de datos y contratos API.
+- Evaluar centralizacion de mas logica clinica en servicios especializados.
+
+## 17. Conclusion tecnica
+
+CaniVet no es una maqueta simple: la base actual refleja un sistema modular con frontend administrativo robusto, backend de soporte util y una capa de datos rica en entidades. La arquitectura ya resuelve escenarios reales como reservas publicas, confirmaciones por correo, pagos online, historial clinico, control multi-sucursal y auditoria. Este manual tecnico deja documentado ese alcance para facilitar sostenibilidad y crecimiento.
