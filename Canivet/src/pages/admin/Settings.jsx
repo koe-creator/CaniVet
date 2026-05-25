@@ -8,18 +8,11 @@ import { ErrorBanner } from '../../components/ui/ErrorBanner'
 import { backend } from '../../services/backend'
 
 const BRANCH_EMPTY = { id: null, name: '', city: '', status: 'Activa' }
-const USER_EMPTY = { email: '', name: '', role: 'user', status: 'activo', branchIds: [] }
 const NOTICE_EMPTY = { client_id: '', title: '', message: '', channel: 'email' }
 
-const ROLE_PERMS = {
-  admin: ['Dashboard', 'Clientes', 'Mascotas', 'Citas', 'Servicios', 'Pagos', 'Inventario', 'Suscripciones', 'Guardería', 'Paseos', 'Reportes', 'Auditoría', 'Configuración'],
-  user:  ['Dashboard', 'Clientes', 'Mascotas', 'Citas', 'Servicios', 'Pagos', 'Inventario', 'Suscripciones', 'Guardería', 'Paseos'],
-}
-
 const TABS = [
-  { id: 'general',      label: 'General',       icon: '⚙️' },
-  { id: 'branches',     label: 'Sucursales',    icon: '🏢' },
-  { id: 'users',        label: 'Usuarios y roles', icon: '👥' },
+  { id: 'general',       label: 'General',        icon: '⚙️' },
+  { id: 'branches',      label: 'Sucursales',     icon: '🏢' },
   { id: 'notifications', label: 'Notificaciones', icon: '🔔' },
 ]
 
@@ -73,37 +66,23 @@ const css = `
 .notif-body span { font-size:12px; color:#64748b; }
 `
 
-const getInitials = (name) => {
-  if (!name) return '?'
-  return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
-}
-
-const AVATAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#0ea5e9']
-const avatarColor = (email) => AVATAR_COLORS[(email || '').charCodeAt(0) % AVATAR_COLORS.length]
-
 export const ConfiguracionPage = () => {
   const { records: clients, error: clientsError, load: loadClients } = useSupabaseCRUD('clientes', 'nombre')
   const { toast, show } = useToast()
   const {
     clinic,
     allBranches,
-    userDirectory,
     notifications,
-    roleLabels,
     saveClinic,
     saveBranch,
     removeBranch,
-    saveUserAccess,
     createNotification,
     updateNotificationStatus,
-    currentEmail,
   } = useAppConfig()
 
   const [tab, setTab] = useState('general')
   const [branchModal, setBranchModal] = useState(false)
   const [branchForm, setBranchForm] = useState(BRANCH_EMPTY)
-  const [userModal, setUserModal] = useState(false)
-  const [userForm, setUserForm] = useState(USER_EMPTY)
   const [noticeForm, setNoticeForm] = useState(NOTICE_EMPTY)
 
   const sortedNotifications = useMemo(
@@ -119,14 +98,6 @@ export const ConfiguracionPage = () => {
     setBranchModal(true)
   }
 
-  const openUserModal = (entry = null) => {
-    setUserForm(entry
-      ? { email: entry.email, name: entry.name, role: entry.role, status: entry.status, branchIds: entry.branchIds || [] }
-      : USER_EMPTY,
-    )
-    setUserModal(true)
-  }
-
   const handleBranchSave = () => {
     if (!branchForm.name.trim() || !branchForm.city.trim()) {
       show('Completa nombre y ciudad', false)
@@ -140,22 +111,6 @@ export const ConfiguracionPage = () => {
   const handleBranchDelete = (branchId) => {
     const { error } = removeBranch(branchId)
     error ? show(error, false) : show('Sucursal eliminada')
-  }
-
-  const handleUserSave = async () => {
-    if (!userForm.email.trim()) { show('El email es requerido', false); return }
-    const { error } = await saveUserAccess(userForm)
-    if (error) { show(error, false); return }
-    setUserModal(false)
-    show('Usuario guardado')
-  }
-
-  const handleUserToggleStatus = async (entry) => {
-    const next = entry.status === 'activo' ? 'inactivo' : 'activo'
-    if (next === 'inactivo' && !window.confirm(`Desactivar el acceso de ${entry.email}?`)) return
-    const { error } = await saveUserAccess({ ...entry, status: next })
-    if (error) { show(error, false); return }
-    show(next === 'activo' ? 'Usuario reactivado' : 'Acceso desactivado')
   }
 
   const handleManualNotification = async () => {
@@ -212,7 +167,7 @@ export const ConfiguracionPage = () => {
       <div className="page-header">
         <div>
           <h1 className="page-title">Configuración</h1>
-          <p className="page-sub">Sistema · Sucursales · Usuarios · Notificaciones</p>
+          <p className="page-sub">Sistema · Sucursales · Notificaciones</p>
         </div>
       </div>
 
@@ -297,121 +252,6 @@ export const ConfiguracionPage = () => {
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* ── Tab: Usuarios y roles ─────────────────────────────────── */}
-      {tab === 'users' && (
-        <div style={{ display: 'grid', gap: 16 }}>
-
-          {/* Matriz de permisos */}
-          <div className="card">
-            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>¿Qué puede hacer cada rol?</h3>
-            <p style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
-              Los usuarios acceden solo a las páginas de su rol. El admin asigna los roles desde esta pantalla.
-            </p>
-            <div className="perm-grid">
-              <div className="perm-card">
-                <h4><span className="role-badge admin">Admin</span> Acceso completo</h4>
-                <div className="perm-list">
-                  {ROLE_PERMS.admin.map(p => <span key={p} className="perm-pill admin">{p}</span>)}
-                </div>
-              </div>
-              <div className="perm-card">
-                <h4><span className="role-badge user">Usuario</span> Acceso operativo</h4>
-                <div className="perm-list">
-                  {ROLE_PERMS.user.map(p => <span key={p} className="perm-pill user">{p}</span>)}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Cómo funciona */}
-          <div className="card" style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a8a)', color: '#fff', border: 'none' }}>
-            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-              <span style={{ fontSize: 32 }}>🔐</span>
-              <div>
-                <h3 style={{ color: '#fff', fontSize: 15, margin: '0 0 8px' }}>Cómo funcionan los roles</h3>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {[
-                    '1. Agrega el email del empleado aquí',
-                    '2. Asígnale un rol (Admin o Usuario)',
-                    '3. El empleado se registra con ese mismo email',
-                    '4. Al entrar, el sistema detecta su rol automáticamente',
-                  ].map(s => (
-                    <span key={s} style={{ background: 'rgba(255,255,255,.1)', borderRadius: 20, padding: '4px 12px', fontSize: 12, color: 'rgba(255,255,255,.85)' }}>
-                      {s}
-                    </span>
-                  ))}
-                </div>
-                <p style={{ fontSize: 12, color: 'rgba(255,255,255,.5)', marginTop: 8 }}>
-                  Los roles se guardan en Supabase — funcionan en cualquier dispositivo y navegador.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Lista de usuarios */}
-          <div className="card">
-            <div className="cfg-section-header">
-              <div>
-                <h3>Usuarios del sistema ({userDirectory.length})</h3>
-                <p style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                  {userDirectory.filter(e => e.role === 'admin' && e.status === 'activo').length} admin activo(s) ·{' '}
-                  {userDirectory.filter(e => e.status === 'activo').length} activos en total
-                </p>
-              </div>
-              <button className="btn-primary" onClick={() => openUserModal()}>+ Agregar usuario</button>
-            </div>
-
-            {userDirectory.length === 0 ? (
-              <p className="cfg-empty">No hay usuarios configurados</p>
-            ) : userDirectory.map(entry => (
-              <div className="user-card" key={entry.email} style={{ opacity: entry.status === 'inactivo' ? 0.55 : 1 }}>
-                <div className="user-avatar" style={{ background: entry.status === 'inactivo' ? '#94a3b8' : avatarColor(entry.email) }}>
-                  {getInitials(entry.name || entry.email)}
-                </div>
-                <div className="user-info">
-                  <strong style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {entry.name || entry.email}
-                    {entry.email === currentEmail && (
-                      <span style={{ fontSize: 10, background: '#f0fdf4', color: '#15803d', borderRadius: 20, padding: '1px 7px', fontWeight: 700 }}>TÚ</span>
-                    )}
-                  </strong>
-                  <span>{entry.email}</span>
-                  <div className="user-branches">
-                    {entry.role === 'admin'
-                      ? <span className="tag tag-green" style={{ fontSize: 11 }}>Todas las sucursales</span>
-                      : (entry.branchIds || []).map(bId => (
-                          <span key={bId} className="tag tag-blue" style={{ fontSize: 11 }}>
-                            {allBranches.find(b => b.id === bId)?.name || 'Sucursal'}
-                          </span>
-                        ))
-                    }
-                    {entry.role !== 'admin' && !entry.branchIds?.length && (
-                      <span style={{ fontSize: 11, color: '#f59e0b' }}>Sin sucursal asignada</span>
-                    )}
-                  </div>
-                </div>
-                <span className={`role-badge ${entry.role}`}>{roleLabels[entry.role]}</span>
-                <span className={`tag ${entry.status === 'activo' ? 'tag-green' : 'tag-red'}`}>
-                  {entry.status}
-                </span>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn-edit" onClick={() => openUserModal(entry)}>Editar</button>
-                  {entry.email !== currentEmail && (
-                    <button
-                      className={entry.status === 'activo' ? 'btn-del' : 'btn-edit'}
-                      style={entry.status !== 'activo' ? { background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' } : {}}
-                      onClick={() => handleUserToggleStatus(entry)}
-                    >
-                      {entry.status === 'activo' ? 'Desactivar' : 'Reactivar'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
@@ -524,94 +364,6 @@ export const ConfiguracionPage = () => {
         </Modal>
       )}
 
-      {/* ── Modal: Usuario ────────────────────────────────────────── */}
-      {userModal && (
-        <Modal
-          title={userForm.email ? `Editar — ${userForm.email}` : 'Agregar usuario'}
-          onClose={() => setUserModal(false)}
-          onSave={handleUserSave}
-          saveLabel="Guardar"
-        >
-          <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#0369a1' }}>
-            El usuario debe registrarse con este email exacto para que su rol sea aplicado al iniciar sesión.
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Nombre completo</label>
-              <input className="form-input" placeholder="Ej: Maria García" value={userForm.name} onChange={e => setUserForm({ ...userForm, name: e.target.value })} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Email *</label>
-              <input className="form-input" type="email" placeholder="usuario@correo.com" value={userForm.email} onChange={e => setUserForm({ ...userForm, email: e.target.value })} />
-            </div>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Rol</label>
-              <select className="form-select" value={userForm.role} onChange={e => setUserForm({ ...userForm, role: e.target.value, branchIds: [] })}>
-                <option value="admin">Administrador — acceso total</option>
-                <option value="user">Usuario — acceso operativo</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Estado</label>
-              <select className="form-select" value={userForm.status} onChange={e => setUserForm({ ...userForm, status: e.target.value })}>
-                <option value="activo">Activo</option>
-                <option value="inactivo">Inactivo</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Permisos del rol seleccionado */}
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>
-              PÁGINAS ACCESIBLES CON ESTE ROL
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-              {ROLE_PERMS[userForm.role].map(p => (
-                <span key={p} className={`perm-pill ${userForm.role}`}>{p}</span>
-              ))}
-            </div>
-          </div>
-
-          {userForm.role !== 'admin' && (
-            <div className="form-group">
-              <label className="form-label">Sucursales permitidas</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-                {allBranches.filter(b => b.status !== 'Archivada').map(b => {
-                  const checked = userForm.branchIds.includes(b.id)
-                  return (
-                    <label key={b.id} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 12px',
-                      border: `1px solid ${checked ? '#3b82f6' : '#e2e8f0'}`,
-                      background: checked ? '#eff6ff' : '#fff',
-                      borderRadius: 9, cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                    }}>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => setUserForm(prev => ({
-                          ...prev,
-                          branchIds: checked
-                            ? prev.branchIds.filter(id => id !== b.id)
-                            : [...prev.branchIds, b.id],
-                        }))}
-                        style={{ accentColor: '#3b82f6' }}
-                      />
-                      {b.name}
-                    </label>
-                  )
-                })}
-              </div>
-              {userForm.branchIds.length === 0 && (
-                <p style={{ fontSize: 12, color: '#f59e0b', marginTop: 6 }}>
-                  Sin sucursal asignada → el usuario verá la sucursal principal
-                </p>
-              )}
-            </div>
-          )}
-        </Modal>
-      )}
     </>
   )
 }
