@@ -8,13 +8,20 @@ from flask import jsonify, request
 
 load_dotenv()
 
+ROLE_ADMIN = "admin"
+ROLE_EMPLEADO = "empleado"
+ROLE_RECEPCIONISTA = "recepcionista"
+ROLE_CLIENTE = "cliente"
+STAFF_ROLES = {ROLE_ADMIN, ROLE_EMPLEADO, ROLE_RECEPCIONISTA}
+
 
 class AuthService:
     def __init__(self):
         self.supabase_url = os.getenv("SUPABASE_URL", "")
+        self.service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
         self.jwt_secret = os.getenv("SUPABASE_JWT_SECRET")
-        self.default_role = os.getenv("DEFAULT_ROLE", "user")
-        self.admin_role = os.getenv("ADMIN_ROLE", "admin")
+        self.default_role = os.getenv("DEFAULT_ROLE", ROLE_CLIENTE)
+        self.admin_role = os.getenv("ADMIN_ROLE", ROLE_ADMIN)
         self.admin_emails = os.getenv("ADMIN_EMAILS", "")
         self.jwks_url = f"{self.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json" if self.supabase_url else None
         self._jwks_cache = []
@@ -85,9 +92,38 @@ class AuthService:
         allowed = [item.strip().lower() for item in self.admin_emails.split(",") if item.strip()]
         return email.strip().lower() in allowed
 
+    def _load_profile_role(self, user_id):
+        if not self.supabase_url or not self.service_role_key or not user_id:
+            return None
+
+        response = requests.get(
+            f"{self.supabase_url.rstrip('/')}/rest/v1/perfiles",
+            params={"select": "rol,estado", "id": f"eq.{user_id}", "limit": "1"},
+            headers={
+                "apikey": self.service_role_key,
+                "Authorization": f"Bearer {self.service_role_key}",
+            },
+            timeout=10,
+        )
+        if not response.ok:
+            return None
+
+        rows = response.json() or []
+        if not rows:
+            return None
+
+        profile = rows[0]
+        role = str(profile.get("rol") or "").strip().lower()
+        if role not in {ROLE_ADMIN, ROLE_EMPLEADO, ROLE_RECEPCIONISTA, ROLE_CLIENTE}:
+            return None
+        return role
+
     def resolve_role(self, payload):
         if self._is_admin_email(payload.get("email")):
             return self.admin_role
+        profile_role = self._load_profile_role(payload.get("sub"))
+        if profile_role:
+            return profile_role
         return self._extract_role(payload)
 
     def authenticate_request(self):
@@ -135,3 +171,20 @@ def require_admin(view):
         return view(*args, **kwargs)
 
     return wrapped
+
+
+def require_roles(*allowed_roles):
+    allowed = {role for role in allowed_roles if role}
+
+    def decorator(view):
+        @wraps(view)
+        @require_auth
+        def wrapped(*args, **kwargs):
+            auth_user = getattr(request, "auth_user", {})
+            if auth_user.get("role") not in allowed:
+                return jsonify({"error": "forbidden", "allowed_roles": sorted(allowed)}), 403
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    return decorator

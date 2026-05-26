@@ -1,8 +1,10 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth }  from '../context/AuthContext'
+import { isConfiguredAdminEmail } from '../constants/access'
 
-export const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth()
+export const ProtectedRoute = ({ children, allowedRoles = null, redirectTo = '/login' }) => {
+  const { user, rol, loading } = useAuth()
+  const canBypassRoleCheck = isConfiguredAdminEmail(user?.email)
 
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -17,5 +19,10 @@ export const ProtectedRoute = ({ children }) => {
     </div>
   )
 
-  return user ? children : <Navigate to="/login" replace />
+  if (!user) return <Navigate to={redirectTo} replace />
+  if (Array.isArray(allowedRoles) && allowedRoles.length && !allowedRoles.includes(rol) && !canBypassRoleCheck) {
+    return <Navigate to="/servicios" replace />
+  }
+
+  return children
 }

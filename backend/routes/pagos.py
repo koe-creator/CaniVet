@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from core.auth import require_auth
+from core.auth import ROLE_ADMIN, ROLE_EMPLEADO, require_roles
 from core.services import SupabaseEntityService
 from core.validators import PAYMENT_VALIDATOR
 
@@ -9,7 +9,7 @@ service = SupabaseEntityService("pagos", "created_at", searchable_fields=["metod
 
 
 @pagos_bp.route("/", methods=["GET"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def get_pagos():
     try:
         records = service.list_records(search=request.args.get("search"), descending=True)
@@ -19,7 +19,7 @@ def get_pagos():
 
 
 @pagos_bp.route("/", methods=["POST"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def create_pago():
     payload, errors = PAYMENT_VALIDATOR.validate(request.get_json(silent=True) or {})
     if errors:
@@ -32,7 +32,7 @@ def create_pago():
 
 
 @pagos_bp.route("/<id>", methods=["PUT"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def update_pago(id):
     payload, errors = PAYMENT_VALIDATOR.validate(request.get_json(silent=True) or {}, partial=True)
     if errors:
@@ -45,7 +45,7 @@ def update_pago(id):
 
 
 @pagos_bp.route("/<id>", methods=["DELETE"])
-@require_auth
+@require_roles(ROLE_ADMIN)
 def delete_pago(id):
     try:
         service.delete_record(id)

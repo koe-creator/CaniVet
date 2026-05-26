@@ -10,7 +10,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests
 from werkzeug.exceptions import HTTPException
-from core.auth import auth_service
+from core.auth import STAFF_ROLES, auth_service
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False  # evita redirect 308 que bloquea CORS preflight
@@ -194,7 +194,7 @@ def auth_redirect():
         app.logger.info("AUTH_REDIRECT invalid_token error=%s header=%s payload=%s", str(e), hdr, payload)
         return jsonify({"error": "invalid_token", "detail": str(e)}), 401
     role        = _resolve_role(payload)
-    redirect_to = ADMIN_PATH if role == ADMIN_ROLE else USER_PATH
+    redirect_to = ADMIN_PATH if role in STAFF_ROLES else USER_PATH
     return jsonify({"role": role, "redirect_to": redirect_to})
 
 # ── BLUEPRINTS ───────────────────────────────────────
@@ -208,6 +208,7 @@ from routes.contact         import contact_bp
 from routes.reservas        import reservas_bp
 from routes.stripe_payments import stripe_bp
 from routes.email_bp        import email_bp
+from routes.auth_users      import auth_users_bp
 
 app.register_blueprint(clientes_bp,   url_prefix='/api/clientes')
 app.register_blueprint(mascotas_bp,   url_prefix='/api/mascotas')
@@ -219,6 +220,7 @@ app.register_blueprint(contact_bp,    url_prefix='/api/contacto')
 app.register_blueprint(reservas_bp,   url_prefix='/api/reservas')
 app.register_blueprint(stripe_bp,     url_prefix='/api/stripe')
 app.register_blueprint(email_bp,      url_prefix='/api/email')
+app.register_blueprint(auth_users_bp, url_prefix='/auth/users')
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))

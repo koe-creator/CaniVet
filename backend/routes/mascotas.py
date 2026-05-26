@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from core.auth import require_auth
+from core.auth import ROLE_ADMIN, ROLE_EMPLEADO, require_roles
 from core.services import SupabaseEntityService
 from core.validators import PET_VALIDATOR
 
@@ -9,7 +9,7 @@ service = SupabaseEntityService("mascotas", "nombre", searchable_fields=["nombre
 
 
 @mascotas_bp.route("/", methods=["GET"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def get_mascotas():
     try:
         records = service.list_records(search=request.args.get("search"))
@@ -19,7 +19,7 @@ def get_mascotas():
 
 
 @mascotas_bp.route("/cliente/<cliente_id>", methods=["GET"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def get_by_cliente(cliente_id):
     try:
         records = service.list_records(filters={"cliente_id": cliente_id})
@@ -29,7 +29,7 @@ def get_by_cliente(cliente_id):
 
 
 @mascotas_bp.route("/", methods=["POST"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def create_mascota():
     payload, errors = PET_VALIDATOR.validate(request.get_json(silent=True) or {})
     if errors:
@@ -42,7 +42,7 @@ def create_mascota():
 
 
 @mascotas_bp.route("/<id>", methods=["PUT"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def update_mascota(id):
     payload, errors = PET_VALIDATOR.validate(request.get_json(silent=True) or {}, partial=True)
     if errors:
@@ -55,7 +55,7 @@ def update_mascota(id):
 
 
 @mascotas_bp.route("/<id>", methods=["DELETE"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def delete_mascota(id):
     try:
         service.delete_record(id)

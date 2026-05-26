@@ -3,7 +3,7 @@ import os
 import stripe
 from flask import Blueprint, jsonify, request
 
-from core.auth import require_auth
+from core.auth import ROLE_ADMIN, ROLE_EMPLEADO, require_roles
 from core.services import SupabaseClientFactory
 
 stripe_bp = Blueprint("stripe", __name__)
@@ -18,7 +18,7 @@ def _supabase():
 
 
 @stripe_bp.route("/checkout", methods=["POST"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def create_checkout():
     """
     Crea una sesión de pago en Stripe.

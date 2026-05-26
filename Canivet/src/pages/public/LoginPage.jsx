@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { ROLES, isStaffRole } from '../../constants/access'
 import { useAuth } from '../../context/AuthContext'
-import { useAppConfig } from '../../context/AppConfigContext'
 
 const css = `
 .login-wrap { min-height: 100vh; display: flex; background: #fff; }
@@ -19,57 +19,53 @@ const css = `
   margin: 0 auto 20px; font-size: 32px;
 }
 .login-brand h1 { font-size: 40px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px; }
-.login-brand p  { font-size: 15px; color: rgba(255,255,255,.55); }
-.login-pills { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 32px; }
-.login-pill {
-  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
-  border-radius: 100px; padding: 6px 14px; color: rgba(255,255,255,.65);
-  font-size: 12px; display: flex; align-items: center; gap: 6px;
-}
-.login-pill-dot { width: 5px; height: 5px; border-radius: 50%; background: #10b981; }
+.login-brand p { font-size: 15px; color: rgba(255,255,255,.6); }
 .login-right {
   width: 460px; display: flex; flex-direction: column;
   justify-content: center; padding: 60px 52px;
 }
-.login-right h2  { font-size: 26px; font-weight: 800; margin-bottom: 6px; }
-.login-sub  { color: #64748b; font-size: 14px; margin-bottom: 28px; }
-.login-err  {
-  background: #fef2f2; border: 1px solid #fecaca; border-radius: 9px;
-  padding: 11px 14px; margin-bottom: 18px; font-size: 13px; color: #dc2626; font-weight: 500;
+.login-right h2 { font-size: 26px; font-weight: 800; margin-bottom: 6px; }
+.login-sub { color: #64748b; font-size: 14px; margin-bottom: 28px; }
+.login-msg {
+  border-radius: 9px; padding: 11px 14px; margin-bottom: 18px; font-size: 13px; font-weight: 500;
 }
+.login-msg.error { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; }
+.login-msg.ok { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+.login-actions { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 12px; }
+.login-link { background: none; border: none; color: #1d4ed8; cursor: pointer; font-weight: 700; padding: 0; }
 .login-btn {
   width: 100%; padding: 13px; background: var(--primary); color: #fff;
   border: none; border-radius: 9px; font-size: 14px; font-weight: 600;
   cursor: pointer; transition: background .15s; display: flex;
   align-items: center; justify-content: center; gap: 8px;
 }
-.login-btn:hover   { background: var(--primary-dark); }
+.login-btn:hover { background: var(--primary-dark); }
 .login-btn:disabled { opacity: .6; cursor: not-allowed; }
-.pw-wrap { position: relative; }
-.pw-toggle {
-  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-  background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 14px;
-}
+.login-btn-label { display: inline-flex; align-items: center; gap: 8px; }
 .spinner {
   width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.4);
   border-top-color: #fff; border-radius: 50%;
   animation: spin .7s linear infinite;
 }
+.spinner.hidden { visibility: hidden; width: 0; border-width: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 768px) { .login-left { display: none; } .login-right { width: 100%; padding: 40px 28px; } }
 `
 
 export const LoginPage = () => {
-  const { login } = useAuth()
-  const { resolveRoleForEmail } = useAppConfig()
+  const { login, forgotPassword } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPw, setShowPw] = useState(false)
   const [errors, setErrors] = useState({})
   const [loading, setLoading] = useState(false)
-  const [authErr, setAuthErr] = useState('')
-  const [storageWarn, setStorageWarn] = useState('')
+  const [message, setMessage] = useState({ type: '', text: '' })
+
+  const redirectTo = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    return params.get('next') || '/servicios'
+  }, [location.search])
 
   const validate = () => {
     const nextErrors = {}
@@ -81,50 +77,39 @@ export const LoginPage = () => {
     return Object.keys(nextErrors).length === 0
   }
 
-  const getRoleFromSession = (session) => {
-    const user = session?.user
-    return user?.role || user?.user_metadata?.role || user?.app_metadata?.role || null
-  }
-
-  const getLoginErrorMessage = (error) => {
-    const detail = error?.data?.detail
-    const apiError = error?.data?.error
-
-    if (detail?.error_description) return detail.error_description
-    if (detail?.msg) return detail.msg
-    if (typeof apiError === 'string' && apiError.trim()) return apiError
-    if (typeof error?.message === 'string' && error.message.trim()) return error.message
-    return 'No se pudo iniciar sesion.'
-  }
-
   const handleSubmit = async () => {
-    setAuthErr('')
+    setMessage({ type: '', text: '' })
     if (!validate()) return
+
     setLoading(true)
     const { data: { session }, error } = await login(email, password)
     setLoading(false)
+
     if (error) {
-      setAuthErr(getLoginErrorMessage(error))
+      const rawMessage = String(error.message || '')
+      const friendlyMessage = /invalid login credentials/i.test(rawMessage)
+        ? 'No se pudo iniciar sesion. Si acabas de registrarte, confirma tu correo primero si Supabase tiene la confirmacion por email activa.'
+        : (error.message || 'No se pudo iniciar sesion.')
+      setMessage({ type: 'error', text: friendlyMessage })
       return
     }
 
-    try {
-      const key = '__canivet_storage_test__'
-      localStorage.setItem(key, '1')
-      localStorage.removeItem(key)
-      sessionStorage.setItem(key, '1')
-      sessionStorage.removeItem(key)
-      setStorageWarn('')
-    } catch {
-      setStorageWarn('Tu navegador bloquea el almacenamiento. La sesion funcionara solo en esta pestana.')
-    }
+    const role = session?.profile?.rol || session?.user?.role || ROLES.CLIENTE
+    navigate(isStaffRole(role) ? '/admin' : redirectTo, { replace: true })
+  }
 
-    const role = resolveRoleForEmail(email, getRoleFromSession(session) || 'user')
-    if (role === 'admin' || role === 'user') {
-      navigate('/admin')
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setMessage({ type: 'error', text: 'Escribe tu email primero para enviarte el enlace de recuperacion.' })
       return
     }
-    navigate('/admin')
+
+    const { error } = await forgotPassword(email)
+    if (error) {
+      setMessage({ type: 'error', text: error.message || 'No se pudo enviar el enlace de recuperacion.' })
+      return
+    }
+    setMessage({ type: 'ok', text: 'Te enviamos un enlace para restablecer la contrasena.' })
   }
 
   return (
@@ -135,52 +120,33 @@ export const LoginPage = () => {
           <div className="login-brand">
             <div className="login-brand-ic">CV</div>
             <h1>CaniVet</h1>
-            <p>Plataforma de gestion veterinaria</p>
-            <div className="login-pills">
-              {['Clientes', 'Mascotas', 'Citas', 'Inventario', 'Reportes'].map((item) => (
-                <div className="login-pill" key={item}><div className="login-pill-dot" />{item}</div>
-              ))}
-            </div>
+            <p>Accede para gestionar o reservar servicios de forma segura.</p>
           </div>
         </div>
         <div className="login-right">
-          <h2>Bienvenido de vuelta</h2>
-          <p className="login-sub">Inicia sesion en tu panel veterinario</p>
-          {authErr && <div className="login-err">Error: {authErr}</div>}
-          {storageWarn && <div className="login-err">Aviso: {storageWarn}</div>}
+          <h2>Iniciar sesion</h2>
+          <p className="login-sub">Tu cuenta es obligatoria para reservar y para entrar al panel.</p>
+          {message.text && <div className={`login-msg ${message.type === 'error' ? 'error' : 'ok'}`}>{message.text}</div>}
           <div className="form-group">
             <label className="form-label">Correo electronico</label>
-            <input
-              className="form-input"
-              type="email"
-              placeholder="tu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-            />
+            <input className="form-input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && handleSubmit()} />
             {errors.email && <p className="form-error">{errors.email}</p>}
           </div>
           <div className="form-group">
             <label className="form-label">Contrasena</label>
-            <div className="pw-wrap">
-              <input
-                className="form-input"
-                type={showPw ? 'text' : 'password'}
-                placeholder="********"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                style={{ paddingRight: 44 }}
-              />
-              <button className="pw-toggle" onClick={() => setShowPw((value) => !value)}>
-                {showPw ? 'Ocultar' : 'Mostrar'}
-              </button>
-            </div>
+            <input className="form-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && handleSubmit()} />
             {errors.password && <p className="form-error">{errors.password}</p>}
           </div>
-          <button className="login-btn" onClick={handleSubmit} disabled={loading}>
-            {loading ? <><div className="spinner" />Verificando...</> : 'Ingresar al sistema'}
+          <button className="login-btn notranslate" translate="no" onClick={handleSubmit} disabled={loading}>
+            <span className="login-btn-label">
+              <div className={`spinner ${loading ? '' : 'hidden'}`} />
+              <span>{loading ? 'Entrando...' : 'Entrar'}</span>
+            </span>
           </button>
+          <div className="login-actions">
+            <button className="login-link" onClick={handleForgotPassword}>Olvide mi contrasena</button>
+            <button className="login-link" onClick={() => navigate(`/registro?next=${encodeURIComponent(redirectTo)}`)}>Crear cuenta</button>
+          </div>
         </div>
       </div>
     </>

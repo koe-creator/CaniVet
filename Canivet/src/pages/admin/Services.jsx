@@ -8,6 +8,20 @@ import { useAppConfig } from '../../context/AppConfigContext'
 import { fmtMoney } from '../../utils/formatters'
 
 const EMPTY = { nombre: '', descripcion: '', precio: '', branch_id: '' }
+const normalizeServiceName = (value = '') => String(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+const resolveServiceEmoji = (service) => {
+  const name = normalizeServiceName(service?.nombre)
+  if (name.includes('consulta')) return '\u{1FA7A}'
+  if (name.includes('vacun')) return '\u{1F489}'
+  if (name.includes('bano') || name.includes('groom')) return '\u{1F6C1}'
+  if (name.includes('cirug')) return '\u{1F3E5}'
+  if (name.includes('pelu')) return '\u2702\uFE0F'
+  if (name.includes('desparasit')) return '\u{1F9A0}'
+  if (name.includes('laboratorio')) return '\u{1F9EA}'
+  if (name.includes('emergencia')) return '\u{1F691}'
+  return '\u{1F43E}'
+}
 
 export const ServiciosPage = () => {
   const { records, loading, error, load, create, update, remove } = useSupabaseCRUD('servicios', 'nombre')
@@ -24,7 +38,7 @@ export const ServiciosPage = () => {
   const validate = () => {
     const nextErrors = {}
     if (!form.nombre.trim()) nextErrors.nombre = 'El nombre es requerido'
-    if (!form.precio || isNaN(form.precio)) nextErrors.precio = 'Precio inválido'
+    if (!form.precio || isNaN(form.precio)) nextErrors.precio = 'Precio invalido'
     setErrors(nextErrors)
     return Object.keys(nextErrors).length === 0
   }
@@ -88,13 +102,13 @@ export const ServiciosPage = () => {
       </div>
       <div className="tbl-wrap">
         <table>
-          <thead><tr><th>Nombre</th><th>Descripción</th><th>Precio</th><th>Sucursal</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Descripcion</th><th>Precio</th><th>Sucursal</th><th>Acciones</th></tr></thead>
           <tbody>
             {loading ? <tr><td colSpan={5} className="empty-state">Cargando...</td></tr>
               : visibleRecords.length === 0 ? <tr><td colSpan={5} className="empty-state">Sin servicios</td></tr>
                 : visibleRecords.map((service) => (
                   <tr key={service.id}>
-                    <td><strong>{service.nombre}</strong></td>
+                    <td><strong>{resolveServiceEmoji(service)} {service.nombre}</strong></td>
                     <td style={{ color: '#64748b' }}>{service.descripcion || '-'}</td>
                     <td><strong style={{ color: '#15803d' }}>{fmtMoney(service.precio)}</strong></td>
                     <td><span className="tag tag-blue">{getBranchName(getRecordBranchId('services', service.id))}</span></td>
@@ -115,8 +129,8 @@ export const ServiciosPage = () => {
             {errors.nombre && <p className="form-error">{errors.nombre}</p>}
           </div>
           <div className="form-group">
-            <label className="form-label">Descripción</label>
-            <input className="form-input" value={form.descripcion} placeholder="Descripción breve" onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
+            <label className="form-label">Descripcion</label>
+            <input className="form-input" value={form.descripcion} placeholder="Descripcion breve" onChange={(e) => setForm({ ...form, descripcion: e.target.value })} />
           </div>
           <div className="form-group">
             <label className="form-label">Precio (RD$) *</label>

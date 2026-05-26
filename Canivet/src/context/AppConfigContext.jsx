@@ -1,21 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { useAuth } from './AuthContext'
+import { PAGE_ACCESS, ROLE_LABELS, ROLES, isConfiguredAdminEmail, normalizeRole } from '../constants/access'
 import { supabase } from '../services/supabase'
 
 const AppConfigContext = createContext(null)
 
 const STORAGE_KEY = 'canivet_app_config_v1'
 const ENTITY_KEYS = ['clients', 'pets', 'appointments', 'services', 'payments', 'inventory']
-
-const ROLE_LABELS = {
-  admin: 'Administrador',
-  user: 'Usuario',
-}
-
-const PAGE_ACCESS = {
-  admin: ['dashboard', 'clients', 'pets', 'appointments', 'services', 'payments', 'inventory', 'reports', 'settings', 'subscriptions', 'daycare', 'walks', 'audit'],
-  user:  ['dashboard', 'clients', 'pets', 'appointments', 'services', 'payments', 'inventory', 'subscriptions', 'daycare', 'walks'],
-}
 
 const DEFAULT_BRANCHES = [
   { id: 'branch_central', name: 'Sede Central', city: 'Santo Domingo', status: 'Activa', isDefault: true },
@@ -83,7 +74,7 @@ const readConfig = () => {
         clinic: { ...DEFAULT_STATE.clinic, ...(parsed.clinic || {}) },
         preferences: { ...DEFAULT_STATE.preferences, ...(parsed.preferences || {}) },
         activeBranchId: parsed.activeBranchId || 'all',
-        userDirectory: Array.isArray(parsed.userDirectory) ? parsed.userDirectory : [],
+        userDirectory: [],
         recordBranches: ensureRecordBranches(parsed.recordBranches),
         appointmentStatuses: parsed.appointmentStatuses || {},
         branches: ensureBranches(parsed.branches),
@@ -274,7 +265,7 @@ const groupByKey = (arr, keyField, mapFn) => {
 export const useAppConfig = () => useContext(AppConfigContext)
 
 export const AppConfigProvider = ({ children }) => {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
 
   // ── Config in localStorage ────────────────────────────────────────────────
   const savedConfig = useMemo(() => readConfig(), [])
@@ -282,7 +273,7 @@ export const AppConfigProvider = ({ children }) => {
   const [clinic, setClinicState] = useState(() => savedConfig?.clinic || DEFAULT_STATE.clinic)
   const [preferences, setPrefsState] = useState(() => savedConfig?.preferences || DEFAULT_STATE.preferences)
   const [activeBranchId, setActiveBranchIdState] = useState(() => savedConfig?.activeBranchId || 'all')
-  const [userDirectory, setUserDirectory] = useState(() => savedConfig?.userDirectory || [])
+  const [userDirectory, setUserDirectory] = useState([])
   const [recordBranches, setRecordBranches] = useState(() => savedConfig?.recordBranches || DEFAULT_STATE.recordBranches)
   const [appointmentStatuses, setApptStatuses] = useState(() => savedConfig?.appointmentStatuses || {})
 
@@ -302,9 +293,9 @@ export const AppConfigProvider = ({ children }) => {
 
   // ── Persist config to localStorage ───────────────────────────────────────
   useEffect(() => {
-    const config = { clinic, preferences, activeBranchId, userDirectory, recordBranches, appointmentStatuses, branches }
+    const config = { clinic, preferences, activeBranchId, recordBranches, appointmentStatuses, branches }
     window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config))
-  }, [clinic, preferences, activeBranchId, userDirectory, recordBranches, appointmentStatuses, branches])
+  }, [clinic, preferences, activeBranchId, recordBranches, appointmentStatuses, branches])
 
   // ── Load all data from Supabase on mount ──────────────────────────────────
   useEffect(() => {
@@ -323,7 +314,7 @@ export const AppConfigProvider = ({ children }) => {
         supabase.from('notificaciones').select('*').order('created_at', { ascending: false }).limit(150),
         supabase.from('auditoria').select('*').order('created_at', { ascending: false }).limit(500),
         supabase.from('fotos_servicio').select('*').order('created_at'),
-        supabase.from('usuarios_sistema').select('*').order('created_at'),
+        supabase.from('perfiles').select('*').order('created_at'),
       ])
 
       // Vaccines — grouped by mascota_id
@@ -385,7 +376,7 @@ export const AppConfigProvider = ({ children }) => {
           id: row.id,
           email: normalizeEmail(row.email),
           name: row.nombre || row.email?.split('@')[0] || 'Usuario',
-          role: row.rol === 'admin' ? 'admin' : 'user',
+          role: normalizeRole(row.rol, ROLES.CLIENTE),
           status: row.estado === 'inactivo' ? 'inactivo' : 'activo',
           branchIds: Array.isArray(row.sucursal_ids) ? row.sucursal_ids : [],
         }))
@@ -410,17 +401,19 @@ export const AppConfigProvider = ({ children }) => {
   }, [])
 
   // ── Derived from config ───────────────────────────────────────────────────
-  const currentEmail = normalizeEmail(user?.email)
+  const currentEmail = normalizeEmail(profile?.email || user?.email)
 
-  const resolveRoleForEmail = useCallback((email, fallbackRole = 'user') => {
+  const resolveRoleForEmail = useCallback((email, fallbackRole = ROLES.CLIENTE) => {
     const normalizedEmail = normalizeEmail(email)
     const entry = userDirectory.find(e => e.email === normalizedEmail && e.status !== 'inactivo')
-    if (fallbackRole === 'admin') return 'admin'
-    if (entry?.role === 'admin') return 'admin'
-    return entry?.role || fallbackRole || 'user'
+    if (normalizeRole(fallbackRole) === ROLES.ADMIN) return ROLES.ADMIN
+    if (entry?.role === ROLES.ADMIN) return ROLES.ADMIN
+    return normalizeRole(entry?.role || fallbackRole || ROLES.CLIENTE)
   }, [userDirectory])
 
   const defaultBranchId = useMemo(() => buildDefaultBranchId(branches), [branches])
+
+  /*
 
   // Auto-register / actualizar usuario logueado
   useEffect(() => {
@@ -432,17 +425,17 @@ export const AppConfigProvider = ({ children }) => {
 
       setUserDirectory(prev => {
         const existing = prev.find(e => e.email === currentEmail)
-        const jwtRole  = user?.role === 'admin' ? 'admin' : 'user'
+        const jwtRole = normalizeRole(user?.role, ROLES.CLIENTE)
         // Si no hay ningún admin en el sistema, el primer usuario que entra se vuelve admin
-        const hasAnyAdmin = prev.some(e => e.role === 'admin' && e.status !== 'inactivo')
-        const resolvedRole = jwtRole === 'admin'
-          ? 'admin'
-          : (!hasAnyAdmin ? 'admin' : (existing?.role || 'user'))
+        const hasAnyAdmin = prev.some(e => e.role === ROLES.ADMIN && e.status !== 'inactivo')
+        const resolvedRole = jwtRole === ROLES.ADMIN
+          ? ROLES.ADMIN
+          : (!hasAnyAdmin ? ROLES.ADMIN : normalizeRole(existing?.role || jwtRole, ROLES.CLIENTE))
 
         if (existing) {
           // Si el JWT dice admin pero el directorio dice user, promoverlo
-          if (resolvedRole === 'admin' && existing.role !== 'admin') {
-            upsertEntry = { ...existing, role: 'admin' }
+          if (resolvedRole === ROLES.ADMIN && existing.role !== ROLES.ADMIN) {
+            upsertEntry = { ...existing, role: ROLES.ADMIN }
             return prev.map(e => e.email === currentEmail ? upsertEntry : e)
           }
           return prev  // sin cambio
@@ -455,13 +448,13 @@ export const AppConfigProvider = ({ children }) => {
           name: currentEmail.split('@')[0] || 'Usuario',
           role: resolvedRole,
           status: 'activo',
-          branchIds: resolvedRole === 'admin' ? [] : [defaultBranchId],
+          branchIds: resolvedRole === ROLES.ADMIN ? [] : [defaultBranchId],
         }
         return [upsertEntry, ...prev]
       })
 
       if (upsertEntry) {
-        supabase.from('usuarios_sistema').upsert({
+        supabase.from('perfiles').upsert({
           id: upsertEntry.id,
           email: upsertEntry.email,
           nombre: upsertEntry.name,
@@ -473,13 +466,17 @@ export const AppConfigProvider = ({ children }) => {
     })
     return () => { cancelled = true }
   }, [currentEmail, user?.role, defaultBranchId])
+  */
 
-  const currentRole = resolveRoleForEmail(currentEmail, user?.role || 'user')
-  const currentRoleLabel = ROLE_LABELS[currentRole] || ROLE_LABELS.user
+  const authRole = isConfiguredAdminEmail(profile?.email || user?.email)
+    ? ROLES.ADMIN
+    : normalizeRole(profile?.rol || user?.role, ROLES.CLIENTE)
+  const currentRole = authRole
+  const currentRoleLabel = ROLE_LABELS[currentRole] || ROLE_LABELS[ROLES.CLIENTE]
 
   const currentDirectoryEntry = useMemo(
-    () => userDirectory.find(e => e.email === currentEmail) || null,
-    [currentEmail, userDirectory],
+    () => userDirectory.find(e => e.id === profile?.id || e.email === currentEmail) || null,
+    [currentEmail, profile?.id, userDirectory],
   )
 
   const availableBranches = useMemo(
@@ -488,16 +485,19 @@ export const AppConfigProvider = ({ children }) => {
   )
 
   const accessibleBranchIds = useMemo(() => {
-    if (currentRole === 'admin') return availableBranches.map(b => b.id)
+    if (currentRole === ROLES.ADMIN) return availableBranches.map(b => b.id)
     if (currentDirectoryEntry?.branchIds?.length) {
       return currentDirectoryEntry.branchIds.filter(id => availableBranches.some(b => b.id === id))
     }
+    if (Array.isArray(profile?.sucursal_ids) && profile.sucursal_ids.length) {
+      return profile.sucursal_ids.filter(id => availableBranches.some(b => b.id === id))
+    }
     return [defaultBranchId]
-  }, [availableBranches, currentDirectoryEntry?.branchIds, currentRole, defaultBranchId])
+  }, [availableBranches, currentDirectoryEntry?.branchIds, currentRole, defaultBranchId, profile?.sucursal_ids])
 
   const effectiveActiveBranchId = useMemo(() => {
     if (!preferences.multiBranch) return 'all'
-    if (currentRole === 'admin') {
+    if (currentRole === ROLES.ADMIN) {
       if (activeBranchId === 'all') return 'all'
       return availableBranches.some(b => b.id === activeBranchId) ? activeBranchId : defaultBranchId
     }
@@ -510,7 +510,7 @@ export const AppConfigProvider = ({ children }) => {
     return accessibleBranchIds[0] || defaultBranchId
   }, [accessibleBranchIds, defaultBranchId, effectiveActiveBranchId])
 
-  const accessiblePages = PAGE_ACCESS[currentRole] || PAGE_ACCESS.user
+  const accessiblePages = PAGE_ACCESS[currentRole] || PAGE_ACCESS[ROLES.CLIENTE]
 
   const getBranchById = useCallback(
     (id) => branches.find(b => b.id === id) || null,
@@ -524,9 +524,9 @@ export const AppConfigProvider = ({ children }) => {
 
   const setActiveBranch = useCallback((id) => {
     if (!preferences.multiBranch) return
-    if (id === 'all' && currentRole !== 'admin') return
+    if (id === 'all' && currentRole !== ROLES.ADMIN) return
     if (id !== 'all' && !availableBranches.some(b => b.id === id)) return
-    if (id !== 'all' && currentRole !== 'admin' && !accessibleBranchIds.includes(id)) return
+    if (id !== 'all' && currentRole !== ROLES.ADMIN && !accessibleBranchIds.includes(id)) return
     setActiveBranchIdState(id)
   }, [accessibleBranchIds, availableBranches, currentRole, preferences.multiBranch])
 
@@ -938,27 +938,46 @@ export const AppConfigProvider = ({ children }) => {
   }, [defaultBranchId])
 
   // ── Users (Supabase + localStorage) ──────────────────────────────────────
+  const reloadUserDirectory = useCallback(async () => {
+    const { data, error } = await supabase.from('perfiles').select('*').order('created_at')
+    if (error) throw error
+    const nextUsers = (data || []).map(row => ({
+      id: row.id,
+      email: normalizeEmail(row.email),
+      name: row.nombre || row.email?.split('@')[0] || 'Usuario',
+      role: normalizeRole(row.rol, ROLES.CLIENTE),
+      status: row.estado === 'inactivo' ? 'inactivo' : 'activo',
+      branchIds: Array.isArray(row.sucursal_ids) ? row.sucursal_ids : [],
+    }))
+    setUserDirectory(nextUsers)
+    return nextUsers
+  }, [])
+
   const saveUserAccess = useCallback(async (payload) => {
+    if (!payload.id) {
+      return { error: 'El usuario debe existir antes de actualizar sus accesos.' }
+    }
+
     const email = normalizeEmail(payload.email)
     let result = { error: null }
     let nextEntry = null
     let previousEntry = null
 
     setUserDirectory(prev => {
-      const existing = prev.find(e => e.email === email)
+      const existing = prev.find(e => e.id === payload.id || e.email === email)
       previousEntry = existing || null
       nextEntry = {
-        id: existing?.id || newUUID(),
+        id: payload.id,
         email,
         name: payload.name || email.split('@')[0] || 'Usuario',
-        role: payload.role === 'admin' ? 'admin' : 'user',
+        role: normalizeRole(payload.role, ROLES.CLIENTE),
         status: payload.status === 'inactivo' ? 'inactivo' : 'activo',
-        branchIds: payload.role === 'admin' ? [] : (payload.branchIds?.length ? payload.branchIds : [defaultBranchId]),
+        branchIds: normalizeRole(payload.role, ROLES.CLIENTE) === ROLES.ADMIN ? [] : (payload.branchIds?.length ? payload.branchIds : [defaultBranchId]),
       }
       const updated = existing
-        ? prev.map(e => e.email === email ? nextEntry : e)
+        ? prev.map(e => (e.id === payload.id || e.email === email) ? nextEntry : e)
         : [nextEntry, ...prev]
-      const admins = updated.filter(e => e.role === 'admin' && e.status !== 'inactivo')
+      const admins = updated.filter(e => e.role === ROLES.ADMIN && e.status !== 'inactivo')
       if (!admins.length) { result = { error: 'Debe existir al menos un administrador activo.' }; return prev }
       return updated
     })
@@ -974,7 +993,7 @@ export const AppConfigProvider = ({ children }) => {
         sucursal_ids: nextEntry.branchIds,
         updated_at: new Date().toISOString(),
       }
-      const { error } = await supabase.from('usuarios_sistema').upsert(row, { onConflict: 'email' })
+      const { error } = await supabase.from('perfiles').upsert(row, { onConflict: 'email' })
       if (error) {
         setUserDirectory(prev => {
           const hasExisting = prev.some(e => e.id === nextEntry.id)
@@ -1319,7 +1338,7 @@ export const AppConfigProvider = ({ children }) => {
   }, [effectiveActiveBranchId, onlinePaymentsMap])
 
   const branchOptions = useMemo(() => (
-    currentRole === 'admin'
+    currentRole === ROLES.ADMIN
       ? availableBranches
       : availableBranches.filter(b => accessibleBranchIds.includes(b.id))
   ), [accessibleBranchIds, availableBranches, currentRole])
@@ -1379,6 +1398,7 @@ export const AppConfigProvider = ({ children }) => {
     updatePreference,
     saveBranch,
     removeBranch,
+    reloadUserDirectory,
     saveUserAccess,
     // Notifications
     notifications,
@@ -1416,7 +1436,7 @@ export const AppConfigProvider = ({ children }) => {
     createOnlinePayment, updateOnlinePayment, removeOnlinePayment,
     getPetVaccines, savePetVaccine, removePetVaccine, clearPetVaccines,
     getPetClinicalHistory, savePetClinicalEntry, removePetClinicalEntry, clearPetClinicalHistory,
-    saveClinic, updatePreference, saveBranch, removeBranch, saveUserAccess,
+    saveClinic, updatePreference, saveBranch, removeBranch, reloadUserDirectory, saveUserAccess,
     notifications, createNotification, updateNotificationStatus,
     subscriptions, saveSubscription, removeSubscription,
     daycareAttendance, saveDaycareRecord, removeDaycareRecord,

@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from core.auth import require_auth
+from core.auth import ROLE_ADMIN, ROLE_EMPLEADO, ROLE_RECEPCIONISTA, require_roles
 from core.services import SupabaseEntityService
 from core.validators import CLIENT_VALIDATOR
 
@@ -9,7 +9,7 @@ service = SupabaseEntityService("clientes", "nombre", searchable_fields=["nombre
 
 
 @clientes_bp.route("/", methods=["GET"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO, ROLE_RECEPCIONISTA)
 def get_clientes():
     try:
         records = service.list_records(search=request.args.get("search"))
@@ -19,7 +19,7 @@ def get_clientes():
 
 
 @clientes_bp.route("/<id>", methods=["GET"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO, ROLE_RECEPCIONISTA)
 def get_cliente(id):
     try:
         return jsonify({"success": True, "data": service.get_record(id)}), 200
@@ -28,7 +28,7 @@ def get_cliente(id):
 
 
 @clientes_bp.route("/", methods=["POST"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO, ROLE_RECEPCIONISTA)
 def create_cliente():
     payload, errors = CLIENT_VALIDATOR.validate(request.get_json(silent=True) or {})
     if errors:
@@ -41,7 +41,7 @@ def create_cliente():
 
 
 @clientes_bp.route("/<id>", methods=["PUT"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO, ROLE_RECEPCIONISTA)
 def update_cliente(id):
     payload, errors = CLIENT_VALIDATOR.validate(request.get_json(silent=True) or {}, partial=True)
     if errors:
@@ -54,7 +54,7 @@ def update_cliente(id):
 
 
 @clientes_bp.route("/<id>", methods=["DELETE"])
-@require_auth
+@require_roles(ROLE_ADMIN)
 def delete_cliente(id):
     try:
         service.delete_record(id)

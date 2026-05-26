@@ -1,42 +1,86 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { ROLES, isConfiguredAdminEmail, isStaffRole } from '../constants/access'
 import { authService } from '../services/authService'
 
 const AuthContext = createContext(null)
+
 // eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext)
 
 export const AuthProvider = ({ children }) => {
-  const [user,    setUser]    = useState(null)
+  const [session, setSession] = useState(null)
+  const [user, setUser] = useState(null)
+  const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    authService.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
+    let mounted = true
+    const applySession = (nextSession) => {
+      if (!mounted) return
+      setSession(nextSession)
+      setUser(nextSession?.user ?? null)
+      setProfile(nextSession?.profile ?? nextSession?.user?.profile ?? null)
       setLoading(false)
+    }
+
+    authService.getSession()
+      .then(({ data: { session: currentSession } }) => {
+        applySession(currentSession)
+      })
+      .catch(() => {
+        applySession(null)
+      })
+
+    const { data: { subscription } } = authService.onAuthChange(async (event, nextSession) => {
+      if (!nextSession && event !== 'SIGNED_OUT') {
+        try {
+          const { data: { session: recoveredSession } } = await authService.getSession()
+          applySession(recoveredSession)
+          return
+        } catch {
+          // If recovery fails, fall through and clear the session.
+        }
+      }
+
+      applySession(nextSession)
     })
-    const { data: { subscription } } = authService.onAuthChange((_e, session) => {
-      setUser(session?.user ?? null)
-    })
-    return () => subscription.unsubscribe()
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
-  const login    = (email, password) => authService.login(email, password)
-  const register = (email, password, data = {}) => authService.register(email, password, data)
-  const logout   = () => authService.logout()
+  const value = useMemo(() => {
+    const role = isConfiguredAdminEmail(profile?.email || user?.email)
+      ? ROLES.ADMIN
+      : (profile?.rol || user?.role || ROLES.CLIENTE)
+    const nombreUsuario = profile?.nombre || user?.email?.split('@')[0] || 'Usuario'
 
-  const isAdmin       = user?.role === 'admin'
-  const rol           = user?.role || null
-  const sucursal      = null
-  const nombreUsuario = user?.email?.split('@')[0] || 'Usuario'
-
-  return (
-    <AuthContext.Provider value={{
-      user, loading,
-      login, register, logout,
-      isAdmin, rol, sucursal, nombreUsuario,
+    return {
+      session,
+      user,
+      profile,
+      loading,
+      login: authService.login,
+      register: authService.register,
+      logout: authService.logout,
+      forgotPassword: authService.forgotPassword,
+      updatePassword: authService.updatePassword,
+      refreshProfile: async () => {
+        const nextProfile = await authService.refreshProfile(user?.id)
+        setProfile(nextProfile)
+        return nextProfile
+      },
       getToken: () => authService.getToken(),
-    }}>
-      {children}
-    </AuthContext.Provider>
-  )
+      isAuthenticated: Boolean(user),
+      isAdmin: role === ROLES.ADMIN,
+      isStaff: isStaffRole(role),
+      rol: role,
+      sucursal: profile?.sucursal_ids?.[0] || null,
+      nombreUsuario,
+    }
+  }, [loading, profile, session, user])
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

@@ -21,11 +21,29 @@ const request = async (path, options = {}) => {
 const authHeader = (token) => ({ Authorization: `Bearer ${token}` })
 
 export const backend = {
-  // Auth
   getRedirect: (token) =>
     request('/auth/redirect', { method: 'POST', headers: authHeader(token) }),
 
-  // Reservas online (endpoint público — sin token)
+  listUsers: (token, search = '') =>
+    request(`/auth/users/${search ? `?search=${encodeURIComponent(search)}` : ''}`, {
+      method: 'GET',
+      headers: authHeader(token),
+    }),
+
+  createUser: (token, payload) =>
+    request('/auth/users/', {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify(payload),
+    }),
+
+  updateUser: (token, id, payload) =>
+    request(`/auth/users/${id}`, {
+      method: 'PUT',
+      headers: authHeader(token),
+      body: JSON.stringify(payload),
+    }),
+
   getAppointments: (token) =>
     request('/api/citas/', { method: 'GET', headers: authHeader(token) }),
 
@@ -56,10 +74,13 @@ export const backend = {
       body: JSON.stringify(payload),
     }),
 
-  createReserva: (payload) =>
-    request('/api/reservas', { method: 'POST', body: JSON.stringify(payload) }),
+  createReserva: (token, payload) =>
+    request('/api/reservas', {
+      method: 'POST',
+      headers: authHeader(token),
+      body: JSON.stringify(payload),
+    }),
 
-  // ── Emails (no requieren token — se llaman después de guardar en Supabase) ──
   emailTestAdmin: () =>
     request('/api/email/test', { method: 'POST' }),
 
@@ -90,7 +111,6 @@ export const backend = {
   emailClientWelcome: (payload) =>
     request('/api/email/client-welcome', { method: 'POST', body: JSON.stringify(payload) }),
 
-  // Stripe (requiere token)
   createStripeCheckout: (token, payload) =>
     request('/api/stripe/checkout', {
       method: 'POST',

@@ -806,3 +806,5 @@ VITE_EMAILJS_PUBLIC_KEY=TU_PUBLIC_KEY
 ---
 
 *CaniVet — Sistema de Gestión Veterinaria*
+---Enlace de github
+https://github.com/koe-creator/CaniVet

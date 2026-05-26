@@ -2,7 +2,7 @@ import threading
 
 from flask import Blueprint, jsonify, request
 
-from core.auth import require_auth
+from core.auth import ROLE_ADMIN, ROLE_CLIENTE, ROLE_EMPLEADO, ROLE_RECEPCIONISTA, require_roles
 from core.email_service import email_service
 from core.services import SupabaseEntityService
 
@@ -15,7 +15,6 @@ service = SupabaseEntityService(
 
 
 def _send_emails_async(reserva: dict):
-    """Envía ambos emails en un hilo separado para no bloquear la respuesta."""
     def _run():
         email_service.send_booking_confirmation(reserva)
         email_service.send_admin_booking_alert(reserva)
@@ -24,31 +23,33 @@ def _send_emails_async(reserva: dict):
 
 
 @reservas_bp.route("/", methods=["POST"])
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO, ROLE_RECEPCIONISTA, ROLE_CLIENTE)
 def create_reserva():
-    """Endpoint público — no requiere autenticación."""
     data = request.get_json(silent=True) or {}
+    auth_user = getattr(request, "auth_user", {})
 
-    nombre = (data.get("nombre") or "").strip()
+    fallback_name = (auth_user.get("email") or "").split("@")[0].strip() if auth_user.get("email") else ""
+    nombre = (data.get("nombre") or data.get("email") or fallback_name or "").strip()
     if not nombre:
         return jsonify({"success": False, "error": "El nombre es requerido"}), 400
 
-    email  = (data.get("email") or "").strip() or None
+    email = (data.get("email") or "").strip() or auth_user.get("email") or None
     telefono = (data.get("telefono") or "").strip() or None
-
     if not email and not telefono:
-        return jsonify({"success": False, "error": "Se requiere email o teléfono"}), 400
+        return jsonify({"success": False, "error": "Se requiere email o telefono"}), 400
 
     payload = {
-        "nombre":          nombre,
-        "email":           email,
-        "telefono":        telefono,
-        "mascota_nombre":  (data.get("mascota_nombre") or "").strip() or None,
-        "servicio_id":     data.get("servicio_id") or None,
+        "usuario_id": auth_user.get("user_id"),
+        "nombre": nombre,
+        "email": email,
+        "telefono": telefono,
+        "mascota_nombre": (data.get("mascota_nombre") or "").strip() or None,
+        "servicio_id": data.get("servicio_id") or None,
         "servicio_nombre": (data.get("servicio_nombre") or "").strip() or None,
-        "fecha":           data.get("fecha") or None,
-        "hora":            data.get("hora") or None,
-        "notas":           (data.get("notas") or "").strip() or None,
-        "estado":          "pendiente",
+        "fecha": data.get("fecha") or None,
+        "hora": data.get("hora") or None,
+        "notas": (data.get("notas") or "").strip() or None,
+        "estado": "pendiente",
     }
 
     try:
@@ -61,7 +62,7 @@ def create_reserva():
 
 
 @reservas_bp.route("/", methods=["GET"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_RECEPCIONISTA)
 def list_reservas():
     try:
         estado = request.args.get("estado")
@@ -77,7 +78,7 @@ def list_reservas():
 
 
 @reservas_bp.route("/<id>", methods=["PUT"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_RECEPCIONISTA)
 def update_reserva(id):
     data = request.get_json(silent=True) or {}
     allowed = {"estado", "cita_id"}

@@ -1,67 +1,74 @@
+import { ROLES, normalizeRole } from '../constants/access'
 import { supabase } from './supabase'
 
 const TOKEN_KEY = 'canivet_access_token'
 let memoryToken = null
 
-const safeLocal = {
-  get: () => {
-    try { return localStorage.getItem(TOKEN_KEY) } catch { return null }
-  },
-  set: (token) => {
-    try { localStorage.setItem(TOKEN_KEY, token) } catch { /* ignore */ }
-  },
-  remove: () => {
-    try { localStorage.removeItem(TOKEN_KEY) } catch { /* ignore */ }
-  },
-}
+const normalizeEmail = (value = '') => String(value).trim().toLowerCase()
+const configuredAdminEmails = Array.from(new Set(
+  [
+    import.meta.env.VITE_ADMIN_EMAIL,
+    import.meta.env.VITE_ADMIN_EMAILS,
+    import.meta.env.VITE_EMAILJS_ADMIN_EMAIL,
+  ]
+    .flatMap(value => String(value || '').split(','))
+    .map(normalizeEmail)
+    .filter(Boolean),
+))
 
-const safeSession = {
+const safeStorage = (storage) => ({
   get: () => {
-    try { return sessionStorage.getItem(TOKEN_KEY) } catch { return null }
+    try { return storage.getItem(TOKEN_KEY) } catch { return null }
   },
   set: (token) => {
-    try { sessionStorage.setItem(TOKEN_KEY, token) } catch { /* ignore */ }
+    try { storage.setItem(TOKEN_KEY, token) } catch { /* ignore */ }
   },
   remove: () => {
-    try { sessionStorage.removeItem(TOKEN_KEY) } catch { /* ignore */ }
+    try { storage.removeItem(TOKEN_KEY) } catch { /* ignore */ }
   },
-}
+})
+
+const safeLocal = safeStorage(localStorage)
+const safeSession = safeStorage(sessionStorage)
 
 const saveToken = (token) => {
   memoryToken = token || null
   if (token) {
     safeLocal.set(token)
     safeSession.set(token)
-  } else {
-    safeLocal.remove()
-    safeSession.remove()
+    return
+  }
+  safeLocal.remove()
+  safeSession.remove()
+}
+
+const isConfiguredAdminEmail = (email) => configuredAdminEmails.includes(normalizeEmail(email))
+
+const normalizeProfile = (profile, user) => {
+  if (!profile && !user) return null
+  return {
+    id: profile?.id || user?.id || null,
+    nombre: profile?.nombre || user?.user_metadata?.nombre || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Usuario',
+    email: profile?.email || user?.email || null,
+    rol: normalizeRole(profile?.rol || user?.app_metadata?.role || user?.user_metadata?.role, ROLES.CLIENTE),
+    estado: profile?.estado || 'activo',
+    sucursal_ids: Array.isArray(profile?.sucursal_ids) ? profile.sucursal_ids : [],
   }
 }
 
-const parseJwt = (token) => {
-  try {
-    const payload = token.split('.')[1]
-    if (!payload) return null
-    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
-    return JSON.parse(json)
-  } catch {
-    return null
-  }
-}
-
-const normalizeSession = (session) => {
+const normalizeSession = (session, profile = null) => {
   if (!session?.access_token) return null
-  const payload = parseJwt(session.access_token)
-  const role = payload?.app_metadata?.role || payload?.user_metadata?.role || payload?.role || session.user?.app_metadata?.role || session.user?.user_metadata?.role || null
+  const role = normalizeRole(profile?.rol || session.user?.app_metadata?.role || session.user?.user_metadata?.role, ROLES.CLIENTE)
+  const nextProfile = normalizeProfile(profile, session.user)
 
   return {
     ...session,
     user: {
       ...session.user,
-      id: session.user?.id || payload?.sub || null,
-      email: session.user?.email || payload?.email || null,
       role,
+      profile: nextProfile,
     },
+    profile: nextProfile,
   }
 }
 
@@ -70,21 +77,90 @@ const syncTokenFromSession = (session) => {
   return session
 }
 
+const loadProfile = async (userId) => {
+  if (!userId) return null
+  const { data, error } = await supabase.from('perfiles').select('*').eq('id', userId).maybeSingle()
+  if (error) return null
+  return data || null
+}
+
+const buildProfilePayload = (user, profile = null) => {
+  if (!user?.id) return null
+  const resolvedRole = isConfiguredAdminEmail(user.email)
+    ? ROLES.ADMIN
+    : normalizeRole(profile?.rol || user?.app_metadata?.role || user?.user_metadata?.role, ROLES.CLIENTE)
+  const payload = {
+    id: user.id,
+    nombre: profile?.nombre || user.user_metadata?.nombre || user.user_metadata?.name || user.email?.split('@')[0] || 'Usuario',
+    email: user.email,
+    rol: resolvedRole,
+    estado: profile?.estado || 'activo',
+    sucursal_ids: resolvedRole === ROLES.ADMIN
+      ? []
+      : (Array.isArray(profile?.sucursal_ids) ? profile.sucursal_ids : []),
+  }
+  return payload
+}
+
+const ensureProfile = async (user, profile = null) => {
+  const payload = buildProfilePayload(user, profile)
+  if (!payload) return profile
+
+  const hasSameRole = normalizeRole(profile?.rol, null) === payload.rol
+  const hasSameEmail = normalizeEmail(profile?.email) === normalizeEmail(payload.email)
+  const hasSameName = String(profile?.nombre || '').trim() === String(payload.nombre || '').trim()
+  const hasValidStatus = ['activo', 'inactivo'].includes(String(profile?.estado || '').trim().toLowerCase())
+  const hasBranches = Array.isArray(profile?.sucursal_ids)
+
+  if (profile && hasSameRole && hasSameEmail && hasSameName && hasValidStatus && hasBranches) {
+    return profile
+  }
+
+  const { data, error } = await supabase.from('perfiles').upsert(payload).select('*').maybeSingle()
+  if (error) return profile
+  return data || payload
+}
+
 export const authService = {
   login: async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { data: { session: null }, error }
 
-    const session = syncTokenFromSession(normalizeSession(data.session))
+    let profile = await loadProfile(data.session?.user?.id)
+    profile = await ensureProfile(data.session?.user, profile)
+    const session = syncTokenFromSession(normalizeSession(data.session, profile))
     return { data: { session }, error: null }
   },
 
-  register: async (email, password, data = {}) => {
-    const { data: sbData, error } = await supabase.auth.signUp({ email, password, options: { data } })
+  register: async (email, password, metadata = {}) => {
+    const role = isConfiguredAdminEmail(email) ? ROLES.ADMIN : normalizeRole(metadata.role, ROLES.CLIENTE)
+    const options = {
+      emailRedirectTo: `${window.location.origin}/login`,
+      data: {
+        nombre: metadata.nombre || metadata.name || '',
+        role,
+      },
+    }
+    const { data: sbData, error } = await supabase.auth.signUp({ email, password, options })
     if (error) return { data: { session: null }, error }
 
-    const session = syncTokenFromSession(normalizeSession(sbData.session))
-    return { data: { session }, error: null }
+    // When email confirmation is enabled, Supabase may create the user without issuing
+    // a session yet. In that state the anon client cannot safely upsert `perfiles`.
+    if (!sbData.session?.access_token) {
+      return {
+        data: {
+          session: null,
+          pendingConfirmation: true,
+          user: sbData.user || null,
+        },
+        error: null,
+      }
+    }
+
+    let profile = await loadProfile(sbData.user?.id)
+    profile = await ensureProfile(sbData.user, profile)
+    const session = syncTokenFromSession(normalizeSession(sbData.session, profile))
+    return { data: { session, pendingConfirmation: false, user: sbData.user || null }, error: null }
   },
 
   logout: async () => {
@@ -97,15 +173,34 @@ export const authService = {
     const { data, error } = await supabase.auth.getSession()
     if (error) return { data: { session: null }, error }
 
-    const session = syncTokenFromSession(normalizeSession(data.session))
+    let profile = await loadProfile(data.session?.user?.id)
+    profile = await ensureProfile(data.session?.user, profile)
+    const session = syncTokenFromSession(normalizeSession(data.session, profile))
     return { data: { session }, error: null }
   },
+
+  refreshProfile: async (userId) => {
+    const profile = await loadProfile(userId)
+    return normalizeProfile(profile, null)
+  },
+
+  forgotPassword: async (email) =>
+    supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    }),
+
+  updatePassword: async (password) =>
+    supabase.auth.updateUser({ password }),
 
   getToken: () => memoryToken || safeLocal.get() || safeSession.get(),
 
   onAuthChange: (callback) => {
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
-      callback(event, syncTokenFromSession(normalizeSession(session)))
+      queueMicrotask(async () => {
+        let profile = await loadProfile(session?.user?.id)
+        profile = await ensureProfile(session?.user, profile)
+        callback(event, syncTokenFromSession(normalizeSession(session, profile)))
+      })
     })
     return { data }
   },

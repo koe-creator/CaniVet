@@ -7,6 +7,7 @@ import { Modal } from '../../components/ui/Modal'
 import { ErrorBanner } from '../../components/ui/ErrorBanner'
 import { useAppConfig } from '../../context/AppConfigContext'
 import { useAuth } from '../../context/AuthContext'
+import { ROLES } from '../../constants/access'
 import { fmtMoney } from '../../utils/formatters'
 import { validateAppointmentForm } from '../../utils/validators'
 import { supabase } from '../../services/supabase'
@@ -38,6 +39,7 @@ export const CitasPage = () => {
   const { records: servicios, error: servicesError, load: loadServices } = useSupabaseCRUD('servicios', 'nombre')
   const {
     branches,
+    currentRole,
     preferredBranchId,
     preferences,
     filterRecords,
@@ -71,6 +73,11 @@ export const CitasPage = () => {
   const [reservasLoading, setReservasLoading] = useState(false)
   const [confirmModal, setConfirmModal] = useState(false)
   const [confirmReserva, setConfirmReserva] = useState(null)
+  const reservationsOnly = currentRole === ROLES.RECEPCIONISTA
+
+  useEffect(() => {
+    if (reservationsOnly) setActiveTab('reservas')
+  }, [reservationsOnly])
 
   useEffect(() => {
     if (activeTab !== 'reservas') return
@@ -531,10 +538,12 @@ export const CitasPage = () => {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 10, padding: 4, gap: 4 }}>
-            <button
-              onClick={() => setActiveTab('citas')}
-              style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: activeTab === 'citas' ? '#fff' : 'none', color: activeTab === 'citas' ? '#0f172a' : '#64748b', boxShadow: activeTab === 'citas' ? '0 1px 3px rgba(0,0,0,.08)' : 'none' }}
-            >Citas</button>
+            {!reservationsOnly && (
+              <button
+                onClick={() => setActiveTab('citas')}
+                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: activeTab === 'citas' ? '#fff' : 'none', color: activeTab === 'citas' ? '#0f172a' : '#64748b', boxShadow: activeTab === 'citas' ? '0 1px 3px rgba(0,0,0,.08)' : 'none' }}
+              >Citas</button>
+            )}
             <button
               onClick={() => setActiveTab('reservas')}
               style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, background: activeTab === 'reservas' ? '#fff' : 'none', color: activeTab === 'reservas' ? '#0f172a' : '#64748b', boxShadow: activeTab === 'reservas' ? '0 1px 3px rgba(0,0,0,.08)' : 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -542,7 +551,7 @@ export const CitasPage = () => {
               {pendingReservas > 0 && <span style={{ background: '#dc2626', color: '#fff', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800 }}>{pendingReservas}</span>}
             </button>
           </div>
-          {activeTab === 'citas' && (
+          {activeTab === 'citas' && !reservationsOnly && (
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 className="btn-edit"

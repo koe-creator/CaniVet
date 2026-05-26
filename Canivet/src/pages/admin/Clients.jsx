@@ -7,7 +7,7 @@ import { ErrorBanner } from '../../components/ui/ErrorBanner'
 import { Pagination } from '../../components/ui/Pagination'
 import { useAppConfig } from '../../context/AppConfigContext'
 import { getInitials } from '../../utils/formatters'
-import { validateClientForm } from '../../utils/validators'
+import { sanitizePhone, validateClientForm } from '../../utils/validators'
 import { backend } from '../../services/backend'
 
 const EMPTY = { nombre: '', telefono: '', email: '', branch_id: '' }
@@ -160,7 +160,8 @@ export const ClientesPage = () => {
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Teléfono</label>
-              <input className="form-input" value={form.telefono} placeholder="809-555-0000" onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
+              <input className="form-input" value={form.telefono} placeholder="809-555-0000" onChange={(e) => setForm({ ...form, telefono: sanitizePhone(e.target.value) })} />
+              {errors.telefono && <p className="form-error">{errors.telefono}</p>}
             </div>
             <div className="form-group">
               <label className="form-label">Email</label>

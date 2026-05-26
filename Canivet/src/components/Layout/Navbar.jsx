@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 
 const css = `
 .navbar {
@@ -24,23 +25,30 @@ const css = `
 }
 .nav-link:hover { background: var(--bg); color: var(--text); }
 .nav-actions { display: flex; gap: 8px; align-items: center; }
-.btn-login {
+.nav-session {
+  padding: 7px 12px; border-radius: 999px; background: #eff6ff;
+  color: #1d4ed8; font-size: 12px; font-weight: 700;
+}
+.btn-login, .btn-register {
   padding: 7px 16px; border: 1.5px solid var(--border); border-radius: 8px;
   font-size: 13px; font-weight: 600; background: none; cursor: pointer;
   color: var(--text); transition: all .15s;
 }
+.btn-register { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
 .btn-login:hover { border-color: var(--primary); color: var(--primary); }
+.btn-register:hover { background: #1e40af; border-color: #1e40af; }
 `
 
 export const Navbar = () => {
   const navigate = useNavigate()
+  const { isAuthenticated, isStaff, nombreUsuario, logout } = useAuth()
 
   return (
     <>
       <style>{css}</style>
       <header className="navbar">
         <div className="nav-brand" onClick={() => navigate('/')}>
-          <div className="nav-brand-icon">🐾</div>
+          <div className="nav-brand-icon">CV</div>
           CaniVet
         </div>
         <nav className="nav-links">
@@ -49,7 +57,18 @@ export const Navbar = () => {
           <button className="nav-link" onClick={() => navigate('/contacto')}>Contacto</button>
         </nav>
         <div className="nav-actions">
-          <button className="btn-login" onClick={() => navigate('/login')}>Iniciar sesión</button>
+          {isAuthenticated ? (
+            <>
+              <span className="nav-session">{nombreUsuario}</span>
+              {isStaff && <button className="btn-login" onClick={() => navigate('/admin')}>Panel</button>}
+              <button className="btn-login" onClick={() => logout()}>Cerrar sesion</button>
+            </>
+          ) : (
+            <>
+              <button className="btn-login" onClick={() => navigate('/login')}>Iniciar sesion</button>
+              <button className="btn-register" onClick={() => navigate('/registro')}>Registrarte</button>
+            </>
+          )}
         </div>
       </header>
     </>

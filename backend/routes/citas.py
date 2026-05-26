@@ -2,7 +2,7 @@ from datetime import date
 
 from flask import Blueprint, jsonify, request
 
-from core.auth import require_auth
+from core.auth import ROLE_ADMIN, ROLE_EMPLEADO, ROLE_RECEPCIONISTA, require_roles
 from core.email_service import email_service
 from core.services import SupabaseEntityService
 from core.validators import APPOINTMENT_VALIDATOR
@@ -53,7 +53,7 @@ def _prepare_cita_payload(payload, partial=False):
             return None, {"mascota_id": "La mascota seleccionada no pertenece al cliente indicado."}
 
     db_payload = {}
-    for key in ("fecha", "hora", "mascota_id", "servicio_id", "notas", "estado"):
+    for key in ("fecha", "hora", "mascota_id", "servicio_id", "notas", "estado", "usuario_id"):
         if key in cleaned:
             db_payload[key] = cleaned[key]
 
@@ -61,7 +61,7 @@ def _prepare_cita_payload(payload, partial=False):
 
 
 @citas_bp.route("/", methods=["GET"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO, ROLE_RECEPCIONISTA)
 def get_citas():
     try:
         records = _enrich_citas(service.list_records(search=request.args.get("search")))
@@ -71,7 +71,7 @@ def get_citas():
 
 
 @citas_bp.route("/hoy", methods=["GET"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO, ROLE_RECEPCIONISTA)
 def get_hoy():
     try:
         records = _enrich_citas(service.list_records(filters={"fecha": date.today().isoformat()}))
@@ -82,7 +82,7 @@ def get_hoy():
 
 
 @citas_bp.route("/", methods=["POST"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def create_cita():
     payload, errors = _prepare_cita_payload(request.get_json(silent=True) or {})
     if errors:
@@ -96,7 +96,7 @@ def create_cita():
 
 
 @citas_bp.route("/<id>", methods=["PUT"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def update_cita(id):
     payload, errors = _prepare_cita_payload(request.get_json(silent=True) or {}, partial=True)
     if errors:
@@ -110,7 +110,7 @@ def update_cita(id):
 
 
 @citas_bp.route("/<id>", methods=["DELETE"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def delete_cita(id):
     try:
         service.delete_record(id)
@@ -120,7 +120,7 @@ def delete_cita(id):
 
 
 @citas_bp.route("/notify-confirmation", methods=["POST"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def notify_confirmation():
     payload = request.get_json(silent=True) or {}
 

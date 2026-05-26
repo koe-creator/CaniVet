@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from core.auth import require_auth
+from core.auth import ROLE_ADMIN, ROLE_EMPLEADO, require_roles
 from core.services import SupabaseEntityService
 from core.validators import SERVICE_VALIDATOR
 
@@ -9,7 +9,7 @@ service = SupabaseEntityService("servicios", "nombre", searchable_fields=["nombr
 
 
 @servicios_bp.route("/", methods=["GET"])
-@require_auth
+@require_roles(ROLE_ADMIN, ROLE_EMPLEADO)
 def get_servicios():
     try:
         records = service.list_records(search=request.args.get("search"))
@@ -19,7 +19,7 @@ def get_servicios():
 
 
 @servicios_bp.route("/", methods=["POST"])
-@require_auth
+@require_roles(ROLE_ADMIN)
 def create_servicio():
     payload, errors = SERVICE_VALIDATOR.validate(request.get_json(silent=True) or {})
     if errors:
@@ -32,7 +32,7 @@ def create_servicio():
 
 
 @servicios_bp.route("/<id>", methods=["PUT"])
-@require_auth
+@require_roles(ROLE_ADMIN)
 def update_servicio(id):
     payload, errors = SERVICE_VALIDATOR.validate(request.get_json(silent=True) or {}, partial=True)
     if errors:
@@ -45,7 +45,7 @@ def update_servicio(id):
 
 
 @servicios_bp.route("/<id>", methods=["DELETE"])
-@require_auth
+@require_roles(ROLE_ADMIN)
 def delete_servicio(id):
     try:
         service.delete_record(id)

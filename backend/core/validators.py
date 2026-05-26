@@ -132,6 +132,7 @@ APPOINTMENT_VALIDATOR = EntityValidator(
     optional_fields={
         "notas": optional_text("Las notas", max_length=300),
         "estado": optional_text("El estado", max_length=40),
+        "usuario_id": optional_text("El usuario"),
     },
 )
 
