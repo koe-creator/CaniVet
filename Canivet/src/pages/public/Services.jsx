@@ -5,7 +5,6 @@ import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../services/supabase'
 import { backend } from '../../services/backend'
 import { sendReservaEmails } from '../../services/emailService'
-import { sanitizePhone, validatePhone } from '../../utils/validators'
 
 const FALLBACK_SERVICES = [
   { id: null, emoji: '\u{1FA7A}', nombre: 'Consulta General', descripcion: 'Revision medica completa con diagnostico y recomendaciones.', precio: 800 },
@@ -34,7 +33,6 @@ const resolveServiceEmoji = (service) => {
 const EMPTY_FORM = {
   nombre: '',
   email: '',
-  telefono: '',
   mascota_nombre: '',
   fecha: '',
   hora: '',
@@ -144,8 +142,7 @@ export const ServicesPage = () => {
     const effectiveEmail = form.email.trim() || resolvedEmail.trim()
 
     if (!effectiveName) { setError('El nombre es requerido.'); return }
-    if (!effectiveEmail && !form.telefono.trim()) { setError('Ingresa email o telefono para confirmar la cita.'); return }
-    if (form.telefono.trim() && !validatePhone(form.telefono.trim())) { setError('El telefono debe tener entre 7 y 15 digitos.'); return }
+    if (!effectiveEmail) { setError('El email es requerido para confirmar la cita.'); return }
     if (!form.fecha) { setError('Selecciona una fecha preferida.'); return }
 
     setSubmitting(true)
@@ -153,8 +150,7 @@ export const ServicesPage = () => {
 
     const payload = {
       nombre: effectiveName,
-      email: effectiveEmail || null,
-      telefono: form.telefono.trim() || null,
+      email: effectiveEmail,
       mascota_nombre: form.mascota_nombre.trim() || null,
       servicio_id: selected?.id || null,
       servicio_nombre: selected?.nombre || '',
@@ -176,7 +172,7 @@ export const ServicesPage = () => {
         servicio: payload.servicio_nombre,
         fecha: payload.fecha,
         hora: payload.hora,
-        contacto: payload.email || payload.telefono,
+        contacto: payload.email,
       })
     } catch (nextError) {
       setError(nextError.message || 'Ocurrio un error al enviar tu reserva.')
@@ -258,10 +254,6 @@ export const ServicesPage = () => {
                   <div className="bk-group">
                     <label className="bk-label">Email</label>
                     <input className="bk-input" type="email" value={form.email} placeholder={resolvedEmail || 'tu@email.com'} onChange={(event) => set('email', event.target.value)} />
-                  </div>
-                  <div className="bk-group">
-                    <label className="bk-label">Telefono</label>
-                    <input className="bk-input" value={form.telefono} onChange={(event) => set('telefono', sanitizePhone(event.target.value))} />
                   </div>
                   <div className="bk-group">
                     <label className="bk-label">Fecha preferida *</label>

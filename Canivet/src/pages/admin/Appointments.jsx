@@ -120,7 +120,7 @@ export const CitasPage = () => {
       cliente_id: '',
       mascota_id: '',
       servicio_id: reserva.servicio_id || '',
-      notas: `Reserva online de ${reserva.nombre} (${reserva.email || reserva.telefono || 'sin contacto'}). Mascota: ${reserva.mascota_nombre || 'no indicada'}.${reserva.notas ? ` Nota: ${reserva.notas}` : ''}`,
+      notas: `Reserva online de ${reserva.nombre} (${reserva.email || 'sin email'}). Mascota: ${reserva.mascota_nombre || 'no indicada'}.${reserva.notas ? ` Nota: ${reserva.notas}` : ''}`,
       branch_id: preferredBranchId,
       status: 'confirmada',
     })
@@ -208,7 +208,7 @@ export const CitasPage = () => {
       type: 'cita',
       title: payload.title || `Cita ${statusLabel.toLowerCase()}`,
       message: `${client?.nombre || 'Cliente'} fue notificado: cita ${statusLabel.toLowerCase()} para ${pet?.nombre || 'su mascota'} el ${payload.fecha} a las ${payload.hora} por ${service?.nombre || 'el servicio seleccionado'}.`,
-      recipient: client?.email || client?.telefono || client?.nombre || 'Cliente sin contacto',
+      recipient: client?.email || client?.nombre || 'Cliente sin contacto',
       clientId: client?.id,
       clientName: client?.nombre || '',
       branchId: payload.branch_id,
@@ -247,7 +247,7 @@ export const CitasPage = () => {
         appointmentId: appointment.id,
         clientId: appointment.cliente_id,
         clientName: client?.nombre || 'Cliente',
-        clientContact: client?.email || client?.telefono || '',
+        clientContact: client?.email || '',
         petName: pet?.nombre || '',
         serviceName: service?.nombre || 'Servicio veterinario',
         amount,
@@ -322,7 +322,7 @@ export const CitasPage = () => {
       type: 'pago_online',
       title: 'Cobro online generado',
       message: `${client?.nombre || 'Cliente'} recibio el enlace ${onlinePayment.paymentReference} por ${fmtMoney(amount)} para ${service?.nombre || 'el servicio agendado'}.${client?.email && payUrl && !payUrl.includes('stripe.local') ? ' El link fue enviado por correo.' : ' Revisa el modulo de Pagos para finalizar o compartir el enlace.'}`,
-      recipient: client?.email || client?.telefono || client?.nombre || 'Cliente sin contacto',
+      recipient: client?.email || client?.nombre || 'Cliente sin contacto',
       clientId: client?.id,
       clientName: client?.nombre || '',
       branchId: getRecordBranchId('appointments', appointment.id),
@@ -608,7 +608,7 @@ export const CitasPage = () => {
                       <td>{r.mascota_nombre || <span style={{ color: '#94a3b8' }}>—</span>}</td>
                       <td><span className="tag tag-blue">{r.servicio_nombre || '—'}</span></td>
                       <td>{r.fecha || '—'}{r.hora ? ` ${r.hora}` : ''}</td>
-                      <td style={{ fontSize: 12 }}>{r.email && <div>{r.email}</div>}{r.telefono && <div>{r.telefono}</div>}</td>
+                      <td style={{ fontSize: 12 }}>{r.email || <span style={{ color: '#94a3b8' }}>Sin email</span>}</td>
                       <td style={{ fontSize: 12, color: '#64748b', maxWidth: 160 }}>{r.notas || '—'}</td>
                       <td>
                         <span className={`tag ${r.estado === 'pendiente' ? 'tag-amber' : r.estado === 'confirmada' ? 'tag-green' : 'tag-red'}`}>

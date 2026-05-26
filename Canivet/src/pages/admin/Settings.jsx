@@ -159,7 +159,7 @@ export const ConfiguracionPage = () => {
         message: noticeForm.message,
         channel: 'email',
         status: 'enviada',
-        recipient: client.email || client.telefono || client.nombre,
+        recipient: client.email || client.nombre,
         clientId: client.id,
         clientName: client.nombre,
       })
@@ -192,7 +192,6 @@ export const ConfiguracionPage = () => {
           <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Perfil del sistema</h3>
           {[
             { label: 'Nombre de la clinica', key: 'nombre', type: 'text' },
-            { label: 'Telefono', key: 'telefono', type: 'tel' },
             { label: 'Email de contacto', key: 'email', type: 'email' },
             { label: 'Zona horaria', key: 'timezone', type: 'text' },
           ].map(field => (

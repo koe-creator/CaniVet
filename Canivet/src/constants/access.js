@@ -34,7 +34,6 @@ export const ADMIN_EMAILS = Array.from(new Set(
   [
     import.meta.env.VITE_ADMIN_EMAIL,
     import.meta.env.VITE_ADMIN_EMAILS,
-    import.meta.env.VITE_EMAILJS_ADMIN_EMAIL,
   ]
     .flatMap(value => String(value || '').split(','))
     .map(normalizeEmail)

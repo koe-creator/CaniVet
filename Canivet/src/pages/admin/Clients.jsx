@@ -7,10 +7,10 @@ import { ErrorBanner } from '../../components/ui/ErrorBanner'
 import { Pagination } from '../../components/ui/Pagination'
 import { useAppConfig } from '../../context/AppConfigContext'
 import { getInitials } from '../../utils/formatters'
-import { sanitizePhone, validateClientForm } from '../../utils/validators'
+import { validateClientForm } from '../../utils/validators'
 import { backend } from '../../services/backend'
 
-const EMPTY = { nombre: '', telefono: '', email: '', branch_id: '' }
+const EMPTY = { nombre: '', email: '', branch_id: '' }
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316']
 
 export const ClientesPage = () => {
@@ -39,7 +39,6 @@ export const ClientesPage = () => {
   const openEdit = (client) => {
     setForm({
       nombre: client.nombre,
-      telefono: client.telefono || '',
       email: client.email || '',
       branch_id: getRecordBranchId('clients', client.id),
     })
@@ -55,7 +54,7 @@ export const ClientesPage = () => {
       return
     }
 
-    const payload = { nombre: form.nombre, telefono: form.telefono, email: form.email }
+    const payload = { nombre: form.nombre, email: form.email }
     const { data, error: saveError } = editing ? await update(editing, payload) : await create(payload)
 
     if (saveError) {
@@ -73,7 +72,7 @@ export const ClientesPage = () => {
         title: 'Cliente registrado',
         message: `${form.nombre} fue agregado al sistema${branchName ? ` en ${branchName}` : ''}.`,
         channel: 'interna',
-        recipient: form.email || form.telefono || form.nombre,
+        recipient: form.email || form.nombre,
         clientId: data?.[0]?.id || null,
         clientName: form.nombre,
         status: 'leida',
@@ -85,7 +84,6 @@ export const ClientesPage = () => {
           await backend.emailClientWelcome({
             email: form.email,
             nombre: form.nombre,
-            telefono: form.telefono,
             sucursal: branchName,
           })
         } catch (notifyError) {
@@ -101,7 +99,7 @@ export const ClientesPage = () => {
   }
 
   const handleDelete = async (id) => {
-    if (!window.confirm('¿Eliminar este cliente?')) return
+    if (!window.confirm('Eliminar este cliente?')) return
     const { error: removeError } = await remove(id)
     removeError ? show('Error al eliminar', false) : show('Cliente eliminado')
   }
@@ -130,14 +128,13 @@ export const ClientesPage = () => {
       </div>
       <div className="tbl-wrap">
         <table>
-          <thead><tr><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Sucursal</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Email</th><th>Sucursal</th><th>Acciones</th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={5} className="empty-state">Cargando...</td></tr>
-              : filtered.length === 0 ? <tr><td colSpan={5} className="empty-state">Sin clientes registrados</td></tr>
+            {loading ? <tr><td colSpan={4} className="empty-state">Cargando...</td></tr>
+              : filtered.length === 0 ? <tr><td colSpan={4} className="empty-state">Sin clientes registrados</td></tr>
                 : filtered.map((client, index) => (
                   <tr key={client.id}>
                     <td><div className="name-cell"><div className="avatar" style={{ background: COLORS[index % COLORS.length] }}>{getInitials(client.nombre)}</div>{client.nombre}</div></td>
-                    <td>{client.telefono || '-'}</td>
                     <td>{client.email || '-'}</td>
                     <td><span className="tag tag-blue">{getBranchName(getRecordBranchId('clients', client.id))}</span></td>
                     <td><div className="act-btns">
@@ -154,20 +151,13 @@ export const ClientesPage = () => {
         <Modal title={editing ? 'Editar cliente' : 'Nuevo cliente'} onClose={() => setModal(false)} onSave={handleSave} saveLabel={editing ? 'Guardar cambios' : 'Crear cliente'}>
           <div className="form-group">
             <label className="form-label">Nombre completo *</label>
-            <input className="form-input" value={form.nombre} placeholder="Ej: Juan Pérez" onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+            <input className="form-input" value={form.nombre} placeholder="Ej: Juan Perez" onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
             {errors.nombre && <p className="form-error">{errors.nombre}</p>}
           </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Teléfono</label>
-              <input className="form-input" value={form.telefono} placeholder="809-555-0000" onChange={(e) => setForm({ ...form, telefono: sanitizePhone(e.target.value) })} />
-              {errors.telefono && <p className="form-error">{errors.telefono}</p>}
-            </div>
-            <div className="form-group">
-              <label className="form-label">Email</label>
-              <input className="form-input" type="email" value={form.email} placeholder="correo@email.com" onChange={(e) => setForm({ ...form, email: e.target.value })} />
-              {errors.email && <p className="form-error">{errors.email}</p>}
-            </div>
+          <div className="form-group">
+            <label className="form-label">Email</label>
+            <input className="form-input" type="email" value={form.email} placeholder="correo@email.com" onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            {errors.email && <p className="form-error">{errors.email}</p>}
           </div>
           <div className="form-group">
             <label className="form-label">Sucursal *</label>

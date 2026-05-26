@@ -52,9 +52,8 @@ export const AuthProvider = ({ children }) => {
   }, [])
 
   const value = useMemo(() => {
-    const role = isConfiguredAdminEmail(profile?.email || user?.email)
-      ? ROLES.ADMIN
-      : (profile?.rol || user?.role || ROLES.CLIENTE)
+    const explicitRole = profile?.rol || user?.role || null
+    const role = explicitRole || (isConfiguredAdminEmail(profile?.email || user?.email) ? ROLES.ADMIN : ROLES.CLIENTE)
     const nombreUsuario = profile?.nombre || user?.email?.split('@')[0] || 'Usuario'
 
     return {

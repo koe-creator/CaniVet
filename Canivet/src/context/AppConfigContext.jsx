@@ -15,7 +15,7 @@ const DEFAULT_BRANCHES = [
 ]
 
 const DEFAULT_STATE = {
-  clinic: { nombre: 'CaniVet', telefono: '809-555-0100', email: 'admin@canivet.com', moneda: 'DOP', timezone: 'America/Santo_Domingo' },
+  clinic: { nombre: 'CaniVet', email: 'admin@canivet.com', moneda: 'DOP', timezone: 'America/Santo_Domingo' },
   preferences: { emailNotifications: true, reminderNotifications: true, paymentReceiptNotifications: true, backupDaily: true, weeklyReports: false, multiBranch: true },
   branches: DEFAULT_BRANCHES,
   activeBranchId: 'all',
@@ -468,9 +468,8 @@ export const AppConfigProvider = ({ children }) => {
   }, [currentEmail, user?.role, defaultBranchId])
   */
 
-  const authRole = isConfiguredAdminEmail(profile?.email || user?.email)
-    ? ROLES.ADMIN
-    : normalizeRole(profile?.rol || user?.role, ROLES.CLIENTE)
+  const explicitAuthRole = normalizeRole(profile?.rol || user?.role, null)
+  const authRole = explicitAuthRole || (isConfiguredAdminEmail(profile?.email || user?.email) ? ROLES.ADMIN : ROLES.CLIENTE)
   const currentRole = authRole
   const currentRoleLabel = ROLE_LABELS[currentRole] || ROLE_LABELS[ROLES.CLIENTE]
 

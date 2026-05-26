@@ -9,7 +9,6 @@ const configuredAdminEmails = Array.from(new Set(
   [
     import.meta.env.VITE_ADMIN_EMAIL,
     import.meta.env.VITE_ADMIN_EMAILS,
-    import.meta.env.VITE_EMAILJS_ADMIN_EMAIL,
   ]
     .flatMap(value => String(value || '').split(','))
     .map(normalizeEmail)
@@ -44,13 +43,23 @@ const saveToken = (token) => {
 
 const isConfiguredAdminEmail = (email) => configuredAdminEmails.includes(normalizeEmail(email))
 
+const resolveStoredRole = (profile, user, fallback = ROLES.CLIENTE) => {
+  const explicitRole = normalizeRole(
+    profile?.rol || user?.app_metadata?.role || user?.user_metadata?.role,
+    null,
+  )
+  if (explicitRole) return explicitRole
+  if (isConfiguredAdminEmail(profile?.email || user?.email)) return ROLES.ADMIN
+  return fallback
+}
+
 const normalizeProfile = (profile, user) => {
   if (!profile && !user) return null
   return {
     id: profile?.id || user?.id || null,
     nombre: profile?.nombre || user?.user_metadata?.nombre || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Usuario',
     email: profile?.email || user?.email || null,
-    rol: normalizeRole(profile?.rol || user?.app_metadata?.role || user?.user_metadata?.role, ROLES.CLIENTE),
+    rol: resolveStoredRole(profile, user),
     estado: profile?.estado || 'activo',
     sucursal_ids: Array.isArray(profile?.sucursal_ids) ? profile.sucursal_ids : [],
   }
@@ -58,7 +67,7 @@ const normalizeProfile = (profile, user) => {
 
 const normalizeSession = (session, profile = null) => {
   if (!session?.access_token) return null
-  const role = normalizeRole(profile?.rol || session.user?.app_metadata?.role || session.user?.user_metadata?.role, ROLES.CLIENTE)
+  const role = resolveStoredRole(profile, session.user)
   const nextProfile = normalizeProfile(profile, session.user)
 
   return {
@@ -86,9 +95,7 @@ const loadProfile = async (userId) => {
 
 const buildProfilePayload = (user, profile = null) => {
   if (!user?.id) return null
-  const resolvedRole = isConfiguredAdminEmail(user.email)
-    ? ROLES.ADMIN
-    : normalizeRole(profile?.rol || user?.app_metadata?.role || user?.user_metadata?.role, ROLES.CLIENTE)
+  const resolvedRole = resolveStoredRole(profile, user)
   const payload = {
     id: user.id,
     nombre: profile?.nombre || user.user_metadata?.nombre || user.user_metadata?.name || user.email?.split('@')[0] || 'Usuario',
@@ -133,7 +140,8 @@ export const authService = {
   },
 
   register: async (email, password, metadata = {}) => {
-    const role = isConfiguredAdminEmail(email) ? ROLES.ADMIN : normalizeRole(metadata.role, ROLES.CLIENTE)
+    const requestedRole = normalizeRole(metadata.role, null)
+    const role = requestedRole || (isConfiguredAdminEmail(email) ? ROLES.ADMIN : ROLES.CLIENTE)
     const options = {
       emailRedirectTo: `${window.location.origin}/login`,
       data: {

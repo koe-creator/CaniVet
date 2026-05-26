@@ -119,11 +119,11 @@ class AuthService:
         return role
 
     def resolve_role(self, payload):
-        if self._is_admin_email(payload.get("email")):
-            return self.admin_role
         profile_role = self._load_profile_role(payload.get("sub"))
         if profile_role:
             return profile_role
+        if self._is_admin_email(payload.get("email")):
+            return self.admin_role
         return self._extract_role(payload)
 
     def authenticate_request(self):
