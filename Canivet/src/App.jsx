@@ -9,6 +9,7 @@ import { RegisterPage }    from './pages/public/RegistrerPage'
 import { ResetPasswordPage } from './pages/public/ResetPasswordPage'
 import { ServicesPage }    from './pages/public/Services'
 import { ContactPage }     from './pages/public/Contact'
+import { StripeCheckoutDemoPage } from './pages/public/StripeCheckoutDemoPage'
 import { AdminLayout }     from './components/layout/AdminLayout'
 import { STAFF_ROLES } from './constants/access'
 
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/servicios" element={<ServicesPage />} />
             <Route path="/contacto"  element={<ContactPage />} />
+            <Route path="/stripe-demo" element={<StripeCheckoutDemoPage />} />
             <Route path="/admin/*"   element={
               <ProtectedRoute allowedRoles={STAFF_ROLES}>
                 <AppConfigProvider>

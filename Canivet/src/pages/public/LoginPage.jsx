@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ROLES, isStaffRole } from '../../constants/access'
 import { useAuth } from '../../context/AuthContext'
+import { sanitizeAppRedirect } from '../../utils/navigation'
 
 const css = `
 .login-wrap { min-height: 100vh; display: flex; background: #fff; }
@@ -64,7 +65,7 @@ export const LoginPage = () => {
 
   const redirectTo = useMemo(() => {
     const params = new URLSearchParams(location.search)
-    return params.get('next') || '/servicios'
+    return sanitizeAppRedirect(params.get('next'), '/servicios')
   }, [location.search])
 
   const validate = () => {

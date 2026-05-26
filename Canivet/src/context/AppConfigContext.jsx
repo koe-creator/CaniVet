@@ -49,6 +49,27 @@ const ensureRecordBranches = (value = {}) =>
 const ensureObjectMap = (value) =>
   value && typeof value === 'object' && !Array.isArray(value) ? value : {}
 
+const buildSimulatedStripeUrl = ({
+  sessionId,
+  clientName,
+  serviceName,
+  petName,
+  amount,
+  branchName,
+  reference,
+}) => {
+  const params = new URLSearchParams({
+    session: sessionId || '',
+    client: clientName || 'Cliente',
+    concept: serviceName || 'Servicio veterinario',
+    pet: petName || '',
+    amount: String(Number(amount || 0)),
+    branch: branchName || 'CaniVet',
+    ref: reference || '',
+  })
+  return `${window.location.origin}/stripe-demo?${params.toString()}`
+}
+
 // ── Config persistida en localStorage (solo clinic, preferences, recordBranches, etc.) ──
 const CONFIG_STORAGE_KEY = 'canivet_config_v2'
 
@@ -468,7 +489,10 @@ export const AppConfigProvider = ({ children }) => {
   }, [currentEmail, user?.role, defaultBranchId])
   */
 
-  const explicitAuthRole = normalizeRole(profile?.rol || user?.role, null)
+  const explicitAuthRole = normalizeRole(
+    profile?.rol || user?.role || user?.app_metadata?.role || user?.user_metadata?.role,
+    null,
+  )
   const authRole = explicitAuthRole || (isConfiguredAdminEmail(profile?.email || user?.email) ? ROLES.ADMIN : ROLES.CLIENTE)
   const currentRole = authRole
   const currentRoleLabel = ROLE_LABELS[currentRole] || ROLE_LABELS[ROLES.CLIENTE]
@@ -659,11 +683,21 @@ export const AppConfigProvider = ({ children }) => {
     const sequence = String(Object.keys(onlinePaymentsMap).length + (existing ? 0 : 1)).padStart(4, '0')
     const reference = existing?.paymentReference || payload.paymentReference || `STR-${year}-${sequence}`
 
+    const branchName = payload.branchName || existing?.branchName || ''
+
     const entry = {
       id,
       stripeSessionId: sessionId,
       paymentReference: reference,
-      paymentUrl: payload.paymentUrl || existing?.paymentUrl || `https://checkout.stripe.local/session/${sessionId}`,
+      paymentUrl: payload.paymentUrl || existing?.paymentUrl || buildSimulatedStripeUrl({
+        sessionId,
+        clientName: payload.clientName || existing?.clientName || 'Cliente',
+        serviceName: payload.serviceName || existing?.serviceName || 'Servicio veterinario',
+        petName: payload.petName || existing?.petName || '',
+        amount: Number(payload.amount ?? existing?.amount ?? 0),
+        branchName,
+        reference,
+      }),
       appointmentId: payload.appointmentId ?? existing?.appointmentId ?? null,
       clientId: payload.clientId ?? existing?.clientId ?? null,
       clientName: payload.clientName || existing?.clientName || 'Cliente',
@@ -674,7 +708,7 @@ export const AppConfigProvider = ({ children }) => {
       currency: payload.currency || existing?.currency || 'DOP',
       status: payload.status || existing?.status || 'enviado',
       branchId: payload.branchId || existing?.branchId || preferredBranchId,
-      branchName: payload.branchName || existing?.branchName || '',
+      branchName,
       source: payload.source || existing?.source || 'manual',
       notes: payload.notes || existing?.notes || '',
       paymentId: payload.paymentId ?? existing?.paymentId ?? null,

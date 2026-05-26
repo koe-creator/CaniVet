@@ -330,7 +330,7 @@ def alerta_vacuna():
 
 @email_bp.route("/link-pago", methods=["POST"])
 def link_pago():
-    """Envía al cliente el link de pago con todos los detalles."""
+    """Envia al cliente un link simulado con apariencia de Stripe."""
     data = request.get_json(silent=True) or {}
     email_c  = (data.get("email") or "").strip()
     nombre   = data.get("nombre") or "Cliente"
@@ -344,23 +344,23 @@ def link_pago():
     if not link:
         return _err("link de pago requerido")
 
-    subject = f"💳 Tu link de pago — {concepto} | CaniVet"
+    subject = f"Link de pago simulado - {concepto} | CaniVet"
     text = (
         f"Hola {nombre},\n\n"
-        f"Te enviamos el link para realizar tu pago en CaniVet.\n\n"
+        f"Te enviamos el enlace de cobro simulado de CaniVet.\n\n"
         f"Concepto: {concepto}\n"
-        f"Monto:    RD$ {monto}\n"
+        f"Monto de referencia: RD$ {monto}\n"
         f"Referencia: {ref}\n\n"
-        f"Haz clic aquí para pagar:\n{link}\n\n"
-        f"El link es seguro y procesado por Stripe.\n\nGracias — CaniVet 🐾"
+        f"Abre este enlace para ver la pagina simulada:\n{link}\n\n"
+        f"Importante: este flujo es demostrativo y no realiza ningun cargo real.\n\nCaniVet"
     )
     html = f"""
     <div style="font-family:system-ui,sans-serif;max-width:520px;margin:32px auto;
                 background:#fff;border-radius:16px;overflow:hidden;
                 box-shadow:0 4px 24px rgba(0,0,0,.07);">
       <div style="background:linear-gradient(135deg,#0f172a,#6d28d9);padding:28px 32px;text-align:center;">
-        <div style="font-size:36px;margin-bottom:6px;">💳</div>
-        <h1 style="color:#fff;font-size:20px;margin:0;font-weight:800;">Link de Pago</h1>
+        <div style="font-size:36px;margin-bottom:6px;">Stripe</div>
+        <h1 style="color:#fff;font-size:20px;margin:0;font-weight:800;">Link de Pago Simulado</h1>
         <p style="color:rgba(255,255,255,.7);font-size:13px;margin:4px 0 0;">CaniVet</p>
       </div>
       <div style="padding:28px 32px;">
@@ -369,7 +369,7 @@ def link_pago():
           <table style="width:100%;border-collapse:collapse;font-size:14px;">
             <tr><td style="padding:7px 0;color:#64748b;">Concepto</td>
                 <td style="padding:7px 0;color:#0f172a;font-weight:600;text-align:right;">{concepto}</td></tr>
-            <tr><td style="padding:7px 0;color:#64748b;">Monto a pagar</td>
+            <tr><td style="padding:7px 0;color:#64748b;">Monto de referencia</td>
                 <td style="padding:7px 0;color:#6d28d9;font-weight:800;font-size:16px;text-align:right;">RD$ {monto}</td></tr>
             {f'<tr><td style="padding:7px 0;color:#64748b;">Referencia</td><td style="padding:7px 0;color:#0f172a;text-align:right;">{ref}</td></tr>' if ref else ''}
           </table>
@@ -378,10 +378,10 @@ def link_pago():
            style="display:block;text-align:center;background:#6d28d9;color:#fff;
                   padding:16px;border-radius:12px;text-decoration:none;
                   font-weight:700;font-size:15px;letter-spacing:.2px;">
-          💳 Pagar ahora →
+          Abrir pagina simulada
         </a>
         <p style="color:#94a3b8;font-size:12px;margin-top:16px;text-align:center;">
-          Pago seguro procesado por Stripe. El link expira en 48 horas.
+          Este enlace es solo demostrativo. No procesa pagos reales ni genera cargos.
         </p>
       </div>
       <div style="background:#f1f5f9;padding:14px 32px;text-align:center;">
@@ -392,7 +392,7 @@ def link_pago():
 
     ok = email_service.send_email(email_c, subject, text, html)
     if ok:
-        return _ok(f"Link de pago enviado a {email_c}")
+        return _ok(f"Link simulado enviado a {email_c}")
     return _err(f"Error SMTP: {email_service.last_error}", 500)
 
 

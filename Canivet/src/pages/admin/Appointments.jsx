@@ -6,7 +6,6 @@ import { Toast } from '../../components/ui/Toast'
 import { Modal } from '../../components/ui/Modal'
 import { ErrorBanner } from '../../components/ui/ErrorBanner'
 import { useAppConfig } from '../../context/AppConfigContext'
-import { useAuth } from '../../context/AuthContext'
 import { ROLES } from '../../constants/access'
 import { fmtMoney } from '../../utils/formatters'
 import { validateAppointmentForm } from '../../utils/validators'
@@ -56,7 +55,6 @@ export const CitasPage = () => {
     saveServicePhoto,
     removeServicePhoto,
   } = useAppConfig()
-  const { getToken } = useAuth()
   const { toast, show } = useToast()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('todas')
@@ -177,10 +175,10 @@ export const CitasPage = () => {
   const visibleRecords = filterRecords('appointments', records)
   const loadError = error || clientsError || petsError || servicesError
 
-  const clientName = (id) => clientes.find((client) => client.id === id)?.nombre || '-'
-  const petName = (id) => mascotas.find((pet) => pet.id === id)?.nombre || '-'
-  const serviceName = (id) => servicios.find((service) => service.id === id)?.nombre || '-'
-  const servicePrice = (id) => Number(servicios.find((service) => service.id === id)?.precio || 0)
+  const clientName = (id) => clientes.find((client) => String(client.id) === String(id))?.nombre || '-'
+  const petName = (id) => mascotas.find((pet) => String(pet.id) === String(id))?.nombre || '-'
+  const serviceName = (id) => servicios.find((service) => String(service.id) === String(id))?.nombre || '-'
+  const servicePrice = (id) => Number(servicios.find((service) => String(service.id) === String(id))?.precio || 0)
   const statusOf = (appointmentId) => getAppointmentStatus(appointmentId)
 
   const filtered = visibleRecords.filter((appointment) => (
@@ -234,13 +232,6 @@ export const CitasPage = () => {
       return
     }
 
-    const customUrlInput = window.prompt(
-      'Pega aquí el Payment Link que quieres enviar al cliente. Si lo dejas vacío, CaniVet intentará generar el cobro automáticamente.',
-      '',
-    )
-    if (customUrlInput === null) return
-    const customUrl = customUrlInput.trim()
-
     let onlinePayment
     try {
       onlinePayment = await createOnlinePayment({
@@ -254,74 +245,37 @@ export const CitasPage = () => {
         branchId: getRecordBranchId('appointments', appointment.id),
         branchName: getBranchName(getRecordBranchId('appointments', appointment.id)),
         notes: `Cobro online generado desde la cita del ${appointment.fecha} a las ${appointment.hora}.`,
-        source: customUrl ? 'payment_link' : 'appointment',
+        source: 'simulado',
         status: 'enviado',
-        paymentUrl: customUrl || undefined,
+        lastEvent: 'checkout_simulado_generado_desde_cita',
       })
     } catch (error) {
       show(`No se pudo generar el cobro online: ${error.message}`, false)
       return
     }
 
-    if (customUrl) {
-      try {
-        onlinePayment = await updateOnlinePayment(onlinePayment.id, {
-          paymentUrl: customUrl,
-          source: 'stripe_payment_link',
-          lastEvent: 'payment_link_configurado_desde_cita',
-        })
-      } catch (error) {
-        show(`No se pudo guardar el Payment Link: ${error.message}`, false)
-        return
-      }
-    } else {
-      const token = getToken()
-      if (token) {
-        try {
-          const stripeRes = await backend.createStripeCheckout(token, {
-            amount: Math.round(Number(amount) * 100),
-            currency: preferences.moneda?.toLowerCase() || 'dop',
-            description: `${service?.nombre || 'Servicio veterinario'} — ${client?.nombre || 'Cliente'}`,
-            customer_email: client?.email || null,
-            online_payment_id: onlinePayment.id,
-            appointment_id: appointment.id,
-          })
-          onlinePayment = await updateOnlinePayment(onlinePayment.id, {
-            stripeSessionId: stripeRes.session_id,
-            paymentUrl: stripeRes.url,
-            source: 'stripe_checkout',
-            lastEvent: 'checkout_creado_desde_cita',
-          })
-        } catch {
-          onlinePayment = await updateOnlinePayment(onlinePayment.id, {
-            source: 'simulado',
-            lastEvent: 'checkout_simulado_desde_cita',
-          })
-        }
-      } else {
-        onlinePayment = await updateOnlinePayment(onlinePayment.id, {
-          source: 'simulado',
-          lastEvent: 'checkout_simulado_sin_token_desde_cita',
-        })
-      }
-    }
-
+    let emailSent = false
     const payUrl = onlinePayment?.paymentUrl || ''
-    if (client?.email && payUrl && !payUrl.includes('stripe.local')) {
-      backend.emailLinkPago({
-        email: client.email,
-        nombre: client.nombre,
-        monto: amount,
-        concepto: service?.nombre || 'Servicio veterinario',
-        link: payUrl,
-        referencia: onlinePayment.paymentReference || '',
-      }).catch(() => {})
+    if (client?.email && payUrl) {
+      try {
+        await backend.emailLinkPago({
+          email: client.email,
+          nombre: client.nombre,
+          monto: amount,
+          concepto: service?.nombre || 'Servicio veterinario',
+          link: payUrl,
+          referencia: onlinePayment.paymentReference || '',
+        })
+        emailSent = true
+      } catch (error) {
+        show(`Se genero el link, pero el correo no se pudo enviar: ${error.message}`, false)
+      }
     }
 
     createNotification({
       type: 'pago_online',
       title: 'Cobro online generado',
-      message: `${client?.nombre || 'Cliente'} recibio el enlace ${onlinePayment.paymentReference} por ${fmtMoney(amount)} para ${service?.nombre || 'el servicio agendado'}.${client?.email && payUrl && !payUrl.includes('stripe.local') ? ' El link fue enviado por correo.' : ' Revisa el modulo de Pagos para finalizar o compartir el enlace.'}`,
+      message: `${client?.nombre || 'Cliente'} ${emailSent ? 'recibio' : 'tiene disponible'} el enlace simulado ${onlinePayment.paymentReference} por ${fmtMoney(amount)} para ${service?.nombre || 'el servicio agendado'}.${client?.email ? (emailSent ? ' El link fue enviado por correo.' : ' El envio por correo fallo; comparte el enlace manualmente.') : ' Revisa el modulo de Pagos para compartir el enlace.'}`,
       recipient: client?.email || client?.nombre || 'Cliente sin contacto',
       clientId: client?.id,
       clientName: client?.nombre || '',
@@ -329,9 +283,11 @@ export const CitasPage = () => {
       channel: preferences.emailNotifications ? 'email' : 'interna',
     })
 
-    show(client?.email && payUrl && !payUrl.includes('stripe.local')
+    show(client?.email && payUrl && emailSent
       ? `Cobro online enviado a ${client.email}`
-      : `Cobro online generado: ${onlinePayment.paymentReference}`)
+      : client?.email && payUrl
+        ? `Cobro online generado, pero el correo fallo: ${onlinePayment.paymentReference}`
+        : `Cobro online generado: ${onlinePayment.paymentReference}`)
   }
 
   const openCreate = () => {

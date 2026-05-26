@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { ROLES, isConfiguredAdminEmail, isStaffRole } from '../constants/access'
+import { ROLES, isConfiguredAdminEmail, isStaffRole, normalizeRole } from '../constants/access'
 import { authService } from '../services/authService'
 
 const AuthContext = createContext(null)
@@ -52,7 +52,10 @@ export const AuthProvider = ({ children }) => {
   }, [])
 
   const value = useMemo(() => {
-    const explicitRole = profile?.rol || user?.role || null
+    const explicitRole = normalizeRole(
+      profile?.rol || user?.role || user?.app_metadata?.role || user?.user_metadata?.role,
+      null,
+    )
     const role = explicitRole || (isConfiguredAdminEmail(profile?.email || user?.email) ? ROLES.ADMIN : ROLES.CLIENTE)
     const nombreUsuario = profile?.nombre || user?.email?.split('@')[0] || 'Usuario'
 

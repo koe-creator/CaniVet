@@ -5,7 +5,6 @@ import { Toast } from '../../components/ui/Toast'
 import { Modal } from '../../components/ui/Modal'
 import { ErrorBanner } from '../../components/ui/ErrorBanner'
 import { useAppConfig } from '../../context/AppConfigContext'
-import { useAuth } from '../../context/AuthContext'
 import { fmtDate, fmtMoney } from '../../utils/formatters'
 import { validatePaymentForm } from '../../utils/validators'
 import { backend } from '../../services/backend'
@@ -32,7 +31,6 @@ const ONLINE_EMPTY = {
   date: today(),
   notes: '',
   source: 'manual',
-  payment_url: '',   // URL de Stripe Payment Link (opcional)
 }
 
 const METODOS = ['efectivo', 'tarjeta', 'transferencia', 'stripe']
@@ -56,6 +54,7 @@ const getOnlineMode = (payment) => {
   if (payment.source === 'stripe_checkout') return 'stripe_checkout'
   if (payment.source === 'stripe_payment_link') return 'stripe_payment_link'
   if (payment.source === 'simulado') return 'simulado'
+  if (payment.paymentUrl?.includes('/stripe-demo')) return 'simulado'
   if (payment.paymentUrl?.includes('buy.stripe.com')) return 'stripe_payment_link'
   if (payment.paymentUrl?.includes('checkout.stripe.com')) return 'stripe_checkout'
   if (payment.paymentUrl?.includes('stripe.local')) return 'simulado'
@@ -92,7 +91,6 @@ const css = `
 `
 
 export const PagosPage = () => {
-  const { getToken } = useAuth()
   const { records, loading, error, load, create, update, remove } = useSupabaseCRUD('pagos', 'created_at')
   const { records: clientes, error: clientsError, load: loadClients } = useSupabaseCRUD('clientes', 'nombre')
   const {
@@ -309,9 +307,6 @@ export const PagosPage = () => {
 
     const client = clientes.find((item) => String(item.id) === String(onlineForm.cliente_id))
 
-    // Si el admin pegó una URL de Stripe Payment Link, usarla directamente
-    const customUrl = onlineForm.payment_url.trim()
-
     let localEntry
     try {
       localEntry = await createOnlinePayment({
@@ -325,93 +320,41 @@ export const PagosPage = () => {
         branchId: onlineForm.branch_id,
         branchName: getBranchName(onlineForm.branch_id),
         notes: onlineForm.notes,
-        source: customUrl ? 'payment_link' : onlineForm.source,
+        source: 'simulado',
         status: 'enviado',
-        lastEvent: customUrl ? 'payment_link_generado' : 'link_generado',
-        paymentUrl: customUrl || undefined,
+        lastEvent: 'checkout_simulado_generado',
       })
     } catch (error) {
       show(`No se pudo crear el link de pago: ${error.message}`, false)
       return
     }
 
-    let finalLink = localEntry
+    const finalLink = localEntry
 
-    if (customUrl) {
-      // Usar el URL pegado directamente (Stripe Payment Link u otro)
-      try {
-        finalLink = await updateOnlinePayment(localEntry.id, {
-          paymentUrl: customUrl,
-          source: 'stripe_payment_link',
-          lastEvent: 'payment_link_configurado',
-        })
-      } catch (error) {
-        show(`No se pudo guardar el Payment Link: ${error.message}`, false)
-        return
-      }
-      show('Stripe Payment Link configurado ✓')
-    } else {
-      // Intentar crear sesión real en Stripe via backend
-      const token = getToken()
-      if (token) {
-        try {
-          const stripeRes = await backend.createStripeCheckout(token, {
-            amount: Math.round(Number(onlineForm.amount) * 100),
-            currency: preferences.moneda?.toLowerCase() || 'dop',
-            description: `${onlineForm.service_name} — ${client?.nombre || 'Cliente'}`,
-            customer_email: client?.email || null,
-            online_payment_id: localEntry.id,
-            appointment_id: onlineForm.appointment_id || '',
-          })
-          finalLink = await updateOnlinePayment(localEntry.id, {
-            stripeSessionId: stripeRes.session_id,
-            paymentUrl: stripeRes.url,
-            source: 'stripe_checkout',
-            lastEvent: 'checkout_creado',
-          })
-          show('Checkout Stripe generado ✓')
-        } catch {
-          try {
-            finalLink = await updateOnlinePayment(localEntry.id, {
-              source: 'simulado',
-              lastEvent: 'checkout_simulado',
-            })
-          } catch (updateError) {
-            show(`No se pudo guardar el modo simulado: ${updateError.message}`, false)
-            return
-          }
-          show('Link generado en modo simulado — configura Stripe para links reales')
-        }
-      } else {
-        try {
-          finalLink = await updateOnlinePayment(localEntry.id, {
-            source: 'simulado',
-            lastEvent: 'checkout_simulado_sin_token',
-          })
-        } catch (error) {
-          show(`No se pudo guardar el link simulado: ${error.message}`, false)
-          return
-        }
-      }
-    }
+    let emailSent = false
 
     // Enviar el link por email al cliente si tiene email
     const payUrl = finalLink?.paymentUrl || ''
-    if (client?.email && payUrl && !payUrl.includes('stripe.local')) {
-      backend.emailLinkPago({
-        email:      client.email,
-        nombre:     client.nombre,
-        monto:      onlineForm.amount,
-        concepto:   onlineForm.service_name,
-        link:       payUrl,
-        referencia: finalLink?.paymentReference || '',
-      }).catch(() => { /* silencioso */ })
+    if (client?.email && payUrl) {
+      try {
+        await backend.emailLinkPago({
+          email:      client.email,
+          nombre:     client.nombre,
+          monto:      onlineForm.amount,
+          concepto:   onlineForm.service_name,
+          link:       payUrl,
+          referencia: finalLink?.paymentReference || '',
+        })
+        emailSent = true
+      } catch (error) {
+        show(`Se genero el link, pero el correo no se pudo enviar: ${error.message}`, false)
+      }
     }
 
     createNotification({
       type: 'pago_online',
       title: 'Link de pago enviado',
-      message: `${client?.nombre || 'Cliente'} recibió el enlace ${finalLink?.paymentReference} por ${fmtMoney(Number(onlineForm.amount))} para ${onlineForm.service_name}.`,
+      message: `${client?.nombre || 'Cliente'} ${emailSent ? 'recibio' : 'tiene disponible'} el enlace simulado ${finalLink?.paymentReference} por ${fmtMoney(Number(onlineForm.amount))} para ${onlineForm.service_name}.${client?.email ? (emailSent ? ' El link fue enviado por correo.' : ' El envio por correo fallo; comparte el enlace manualmente.') : ' El cliente no tiene email registrado.'}`,
       recipient: client?.email || client?.nombre || 'Sin contacto',
       clientId: client?.id,
       clientName: client?.nombre || '',
@@ -421,6 +364,11 @@ export const PagosPage = () => {
 
     setOnlineModal(false)
     setOnlinePreview(finalLink)
+    show(client?.email && emailSent
+      ? `Link simulado enviado a ${client.email}`
+      : client?.email
+        ? `Link simulado generado, pero el correo fallo: ${finalLink.paymentReference}`
+        : `Link simulado generado: ${finalLink.paymentReference}`)
   }
 
   const handleDelete = async (id) => {
@@ -689,7 +637,7 @@ export const PagosPage = () => {
         <>
           <div className="online-callout">
             <h3>Cobros online</h3>
-            <p>Desde aquí puedes usar un Payment Link real de Stripe, crear un checkout real desde el backend o trabajar en modo simulado mientras terminas la configuración.</p>
+            <p>Desde aqui generas enlaces simulados con apariencia de Stripe. El cliente recibe el link por correo, pero no se procesa ningun cobro real.</p>
           </div>
 
           <div className="pay-kpi-grid">
@@ -783,8 +731,8 @@ export const PagosPage = () => {
             <strong style={{ display: 'block', marginBottom: 4 }}>¿Cómo funciona?</strong>
             <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
               <li>Completa los datos del cobro</li>
-              <li>Pega un <strong>Stripe Payment Link</strong> (opcional) o el sistema genera uno automáticamente</li>
-              <li>El cliente recibe el link por email y paga con tarjeta</li>
+              <li>El sistema genera un enlace simulado con apariencia de Stripe</li>
+              <li>El cliente recibe ese link por email y solo ve la pantalla simulada</li>
             </ol>
           </div>
 
@@ -824,27 +772,6 @@ export const PagosPage = () => {
               {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name} - {branch.city}</option>)}
             </select>
             {onlineErrors.branch_id && <p className="form-error">{onlineErrors.branch_id}</p>}
-          </div>
-
-          {/* Campo de URL de Stripe Payment Link */}
-          <div className="form-group">
-            <label className="form-label">
-              Stripe Payment Link
-              <span style={{ fontWeight: 400, color: '#94a3b8', marginLeft: 6 }}>(opcional)</span>
-            </label>
-            <input
-              className="form-input"
-              value={onlineForm.payment_url}
-              placeholder="https://buy.stripe.com/..."
-              onChange={(e) => setOnlineForm({ ...onlineForm, payment_url: e.target.value })}
-            />
-            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-              Crea un Payment Link en{' '}
-              <a href="https://dashboard.stripe.com/payment-links" target="_blank" rel="noreferrer" style={{ color: '#6d28d9' }}>
-                dashboard.stripe.com/payment-links
-              </a>{' '}
-              y pégalo aquí. Si lo dejas vacío, se genera un link simulado.
-            </p>
           </div>
 
           <div className="form-group">
@@ -907,7 +834,7 @@ export const PagosPage = () => {
             <>
               <div className="left">
                 <button className="btn-secondary" onClick={() => setOnlinePreview(null)}>Cerrar</button>
-                <button className="btn-secondary" onClick={() => window.open(onlinePreview.paymentUrl, '_blank')}>Abrir checkout</button>
+                <button className="btn-secondary" onClick={() => window.open(onlinePreview.paymentUrl, '_blank')}>Abrir pagina Stripe</button>
               </div>
               <div className="right">
                 {onlinePreview.status !== 'pagado' && <button className="btn-secondary" onClick={() => simulateOnlineOutcome('vencido')}>Marcar vencido</button>}

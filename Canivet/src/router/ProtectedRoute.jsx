@@ -1,10 +1,15 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth }  from '../context/AuthContext'
-import { isConfiguredAdminEmail } from '../constants/access'
+import { sanitizeAppRedirect } from '../utils/navigation'
 
 export const ProtectedRoute = ({ children, allowedRoles = null, redirectTo = '/login' }) => {
+  const location = useLocation()
   const { user, rol, loading } = useAuth()
-  const canBypassRoleCheck = isConfiguredAdminEmail(user?.email)
+  const nextPath = sanitizeAppRedirect(
+    `${location.pathname || ''}${location.search || ''}${location.hash || ''}`,
+    '/servicios',
+  )
+  const loginPath = `${sanitizeAppRedirect(redirectTo, '/login')}?next=${encodeURIComponent(nextPath)}`
 
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -19,8 +24,8 @@ export const ProtectedRoute = ({ children, allowedRoles = null, redirectTo = '/l
     </div>
   )
 
-  if (!user) return <Navigate to={redirectTo} replace />
-  if (Array.isArray(allowedRoles) && allowedRoles.length && !allowedRoles.includes(rol) && !canBypassRoleCheck) {
+  if (!user) return <Navigate to={loginPath} replace />
+  if (Array.isArray(allowedRoles) && allowedRoles.length && !allowedRoles.includes(rol)) {
     return <Navigate to="/servicios" replace />
   }
 
